@@ -30,13 +30,18 @@ const (
 )
 
 func DotNet(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
+	collectorUrlEnv := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
+	if len(env.Current.OtlpHTTPEndpoint) > 0 {
+		collectorUrlEnv = env.Current.OtlpHTTPEndpoint
+	}
+
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
 			enableProfilingEnvVar: "1",
 			profilerEndVar:        profilerId,
 			profilerPathEnv:       profilerPath,
 			tracerHomeEnv:         tracerHome,
-			collectorUrlEnv:       fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort),
+			collectorUrlEnv:       collectorUrlEnv,
 			serviceNameEnv:        deviceId,
 			exportTypeEnv:         "otlp",
 			resourceAttrEnv:       "odigos.device=dotnet",
