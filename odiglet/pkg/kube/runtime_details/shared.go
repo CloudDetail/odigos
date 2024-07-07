@@ -96,7 +96,7 @@ func runtimeInspection(pods []corev1.Pod, ignoredContainers []string) ([]odigosv
 				}
 			}
 
-			var envs []odigosv1.EnvVar
+			envs := make([]odigosv1.EnvVar, 0)
 			if inspectProc == nil {
 				log.Logger.V(0).Info("unable to detect language for any process", "pod", pod.Name, "container", container.Name, "namespace", pod.Namespace)
 				lang = common.UnknownProgrammingLanguage
