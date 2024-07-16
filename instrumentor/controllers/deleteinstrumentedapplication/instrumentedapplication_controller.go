@@ -88,6 +88,7 @@ func (r *InstrumentedApplicationReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
+	// TODO 删除instrumented Application同时清理originx-instrument-patch
 	if !instEffectiveEnabled {
 		logger.Info("Deleting instrumented application for non-enabled workload")
 		err := r.Client.Delete(ctx, &instrumentedApplication)
