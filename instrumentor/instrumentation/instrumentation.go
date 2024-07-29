@@ -208,11 +208,18 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 	// Step 3: auto discovery service name (OTEL_SERVICE_NAME)
 	if _, find := observedEnvs["OTEL_SERVICE_NAME"]; !find {
 		name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
-		if err != nil {
-			newEnvs = append(newEnvs, corev1.EnvVar{
-				Name:  "OTEL_SERVICE_NAME",
-				Value: fmt.Sprintf("%s-%s", name, container),
-			})
+		if err == nil {
+			if name == container.Name {
+				newEnvs = append(newEnvs, corev1.EnvVar{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: container.Name,
+				})
+			} else {
+				newEnvs = append(newEnvs, corev1.EnvVar{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: fmt.Sprintf("%s-%s", name, container.Name),
+				})
+			}
 		}
 	}
 
