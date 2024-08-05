@@ -19,7 +19,7 @@ ARG DOTNET_OTEL_VERSION=v0.7.0
 ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/$DOTNET_OTEL_VERSION/opentelemetry-dotnet-instrumentation-linux-musl.zip .
 RUN unzip opentelemetry-dotnet-instrumentation-linux-musl.zip && rm opentelemetry-dotnet-instrumentation-linux-musl.zip
 
-FROM --platform=$BUILDPLATFORM keyval/odiglet-base:v1.4 as builder
+FROM keyval/odiglet-base:v1.4 as builder
 WORKDIR /go/src/github.com/odigos-io/odigos
 # Copyy local modules required by the build
 COPY api/ api/
@@ -31,6 +31,7 @@ WORKDIR /go/src/github.com/odigos-io/odigos/odiglet
 COPY odiglet/ .
 
 ARG TARGETARCH
+ENV GOPROXY https://goproxy.cn
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     GOOS=linux GOARCH=$TARGETARCH make build-odiglet

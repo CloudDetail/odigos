@@ -3,6 +3,8 @@
         "Ebpf",
         "instrumentor",
         "odigos",
-        "Otel"
+        "Otel",
+        "podv",
+        "smgr"
     ]
 }

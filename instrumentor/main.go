@@ -23,11 +23,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/odigos-io/odigos/common/consts"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -35,11 +38,13 @@ import (
 	bridge "github.com/odigos-io/opentelemetry-zap-bridge"
 
 	v1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
+	podv1 "github.com/odigos-io/odigos/api/v1"
 	"github.com/odigos-io/odigos/common"
 
 	"github.com/odigos-io/odigos/instrumentor/controllers/deleteinstrumentedapplication"
 	"github.com/odigos-io/odigos/instrumentor/controllers/instrumentationdevice"
 	"github.com/odigos-io/odigos/instrumentor/report"
+	"github.com/odigos-io/odigos/instrumentor/setup"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -146,6 +151,29 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	mgr.GetWebhookServer().Register("/mutate-core-v1-pod", &webhook.Admission{
+		Handler: &podv1.PodInstrument{
+			Client:  mgr.GetClient(),
+			Decoder: admission.NewDecoder(mgr.GetScheme()),
+		},
+	})
+
+	path, find := os.LookupEnv("INSTRUMENT_CONFIGS_PATH")
+	if !find {
+		path = "config/instrument-conf.yaml"
+	}
+
+	setupCfg := viper.New()
+	setupCfg.SetConfigFile(path)
+	if err := setupCfg.ReadInConfig(); err != nil {
+		setupLog.Error(err, "unable to read the config file", "path", path, "err", err)
+	} else {
+		// TODO hold manager instance
+		smgr := setup.NewSetupManager(setupLog, setupCfg, mgr.GetClient())
+		mgr.Add(smgr)
+		setupLog.Info("prepare setup manager finished")
 	}
 
 	go common.StartPprofServer(setupLog)
