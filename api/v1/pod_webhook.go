@@ -49,7 +49,7 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	podlog.Info("admitting pod", "name", pod.Name, "namespace", pod.Namespace)
+	podlog.Info("admitting pod", "name", req.Name, "namespace", pod.Namespace)
 
 	// TODO 检查能否获取到可用的Odiglet示例; 如果Odiglet全部未就绪,则拒绝应用patch
 	ownerReferences := pod.GetOwnerReferences()

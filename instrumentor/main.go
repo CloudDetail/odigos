@@ -49,6 +49,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -160,20 +161,10 @@ func main() {
 		},
 	})
 
-	path, find := os.LookupEnv("INSTRUMENT_CONFIGS_PATH")
-	if !find {
-		path = "config/instrument-conf.yaml"
-	}
-
-	setupCfg := viper.New()
-	setupCfg.SetConfigFile(path)
-	if err := setupCfg.ReadInConfig(); err != nil {
-		setupLog.Error(err, "unable to read the config file", "path", path, "err", err)
+	if setupMgr, err := createSetupManager(); err == nil {
+		mgr.Add(setupMgr)
 	} else {
-		// TODO hold manager instance
-		smgr := setup.NewSetupManager(setupLog, setupCfg, mgr.GetClient())
-		mgr.Add(smgr)
-		setupLog.Info("prepare setup manager finished")
+		setupLog.Error(err, "unable to create setup manager")
 	}
 
 	go common.StartPprofServer(setupLog)
@@ -187,4 +178,32 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func createSetupManager() (*setup.SetupManager, error) {
+	path, find := os.LookupEnv("INSTRUMENT_CONFIGS_PATH")
+	if !find {
+		path = "config/instrument-conf.yaml"
+	}
+
+	// 读取setup配置
+	setupCfg := viper.New()
+	setupCfg.SetConfigFile(path)
+	err := setupCfg.ReadInConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建新的k8s client
+	// !!!不能使用 mgr.GetClient, 因为此时的Client是从缓存中读取
+	k8sCfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	client, err := client.New(k8sCfg, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+	smgr := setup.NewSetupManager(setupLog, setupCfg, client)
+	return smgr, nil
 }

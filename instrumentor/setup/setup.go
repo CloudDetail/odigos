@@ -64,7 +64,7 @@ func (m *SetupManager) UpdateAnnotationsByRule() {
 	// 对所有可访问的NS(跳过kube-system)添加注入标记
 	nsList, err := m.namespaces.InstrumentWithCfg(m.logger, m.client, m.cfg, instrumentAll)
 	if err != nil {
-		m.logger.Error(err, "error list namespace")
+		m.logger.Error(err, "error instrument namespace")
 	}
 	// 同时向所有可访问的workload添加注入标记
 	for _, namespace := range nsList {
