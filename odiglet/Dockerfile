@@ -1,23 +1,3 @@
-FROM python:3.11 AS python-builder
-WORKDIR /python-instrumentation
-ADD odiglet/agents/python/requirements.txt .
-RUN mkdir workspace && pip install --target workspace -r requirements.txt
-
-FROM node:18 AS nodejs-builder
-ARG ODIGOS_VERSION
-WORKDIR /nodejs-instrumentation
-COPY agents/nodejs .
-# inject the actual version into the agent code
-RUN echo "export const VERSION = \"$ODIGOS_VERSION\";" > ./src/version.ts
-RUN yarn
-RUN yarn compile
-RUN rm -rf node_modules && yarn --production # Remove dev dependencies
-
-FROM busybox AS dotnet-builder
-WORKDIR /dotnet-instrumentation
-ARG DOTNET_OTEL_VERSION=v0.7.0
-ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/$DOTNET_OTEL_VERSION/opentelemetry-dotnet-instrumentation-linux-musl.zip .
-RUN unzip opentelemetry-dotnet-instrumentation-linux-musl.zip && rm opentelemetry-dotnet-instrumentation-linux-musl.zip
 
 FROM keyval/odiglet-base:v1.4 as builder
 WORKDIR /go/src/github.com/odigos-io/odigos
@@ -40,18 +20,17 @@ WORKDIR /instrumentations
 
 # Java
 ARG JAVA_OTEL_VERSION=v2.3.0
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/$JAVA_OTEL_VERSION/opentelemetry-javaagent.jar /instrumentations/java/javaagent.jar
+ADD ./opentelemetry-javaagent.jar /instrumentations/java/javaagent.jar
 RUN chmod 644 /instrumentations/java/javaagent.jar
 
 # Python
-COPY --from=python-builder /python-instrumentation/workspace /instrumentations/python
+COPY ./python-instrumentation-originx/workspace/ /instrumentations/python
 
 # NodeJS
-COPY --from=nodejs-builder /nodejs-instrumentation/build/src /instrumentations/nodejs
-COPY --from=nodejs-builder /nodejs-instrumentation/node_modules /instrumentations/nodejs/node_modules
-
+COPY  nodejs-instrumentation/workspace/node_modules/ /instrumentations/nodejs/node_modules
+COPY  nodejs-instrumentation/src /instrumentations/nodejs
 # .NET
-COPY --from=dotnet-builder /dotnet-instrumentation /instrumentations/dotnet
+COPY  ./tracer-home /instrumentations/dotnet
 
 FROM registry.fedoraproject.org/fedora-minimal:38
 COPY --from=builder /go/src/github.com/odigos-io/odigos/odiglet/odiglet /root/odiglet
