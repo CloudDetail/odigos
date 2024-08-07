@@ -45,6 +45,9 @@ func DetectLanguage(process process.Details) (common.ProgrammingLanguage, error)
 			if detectedLanguage == common.UnknownProgrammingLanguage {
 				detectedLanguage = language
 				continue
+			} else if detectedLanguage == common.DotNetProgrammingLanguage {
+				detectedLanguage = language
+				continue
 			}
 			return common.UnknownProgrammingLanguage, ErrLanguageDetectionConflict{
 				languages: [2]common.ProgrammingLanguage{
