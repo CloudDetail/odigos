@@ -85,14 +85,30 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 		return admission.Allowed(fmt.Sprintf("no instrument annotations: %s/%s", ownerKind, ownerName))
 	}
 
-	value, find := labels["odigos-instrumentation"]
-	if !find || value != "enabled" {
-		return admission.Allowed(fmt.Sprintf("instrument has been disabled for application: %s/%s", ownerKind, ownerName))
-	}
-
+	// 检查工作负载上的patch
 	patchB64, find := annotations["originx-instrument-patch"]
 	if !find || len(patchB64) <= 0 {
 		return admission.Allowed(fmt.Sprintf("no instrument annotations: %s/%s", ownerKind, ownerName))
+	}
+
+	// 检查工作负载上的标签
+	mark, find := labels["odigos-instrumentation"]
+	if !find {
+		// 再检查namespace上的标签
+		namespaceObj := &corev1.Namespace{}
+		err = a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: namespace}, namespaceObj)
+		if err != nil {
+			return admission.Allowed(fmt.Sprintf("can not find namespace: %s ", namespace))
+		}
+
+		mark, find := namespaceObj.GetAnnotations()["odigos-instrumentation"]
+		if !find || mark != "enabled" {
+			return admission.Allowed(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
+		} else if mark == "disabled" {
+			return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
+		}
+	} else if mark == "disabled" {
+		return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s, workload: %s", namespace, ownerName))
 	}
 
 	patchBytes, err := base64.StdEncoding.DecodeString(patchB64)
