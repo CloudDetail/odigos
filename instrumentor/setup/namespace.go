@@ -63,6 +63,7 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 			// 永远不操作kube-system下面的资源
 			continue
 		}
+		logger.Info("check namespace", "name", ns.Name)
 		nsList = append(nsList, ns.Name)
 		op, find := nsCfg[ns.Name]
 		isEnabled := checkIfEnabled(find, op, defaultEnable)
