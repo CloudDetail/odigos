@@ -29,8 +29,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -38,7 +36,6 @@ import (
 	bridge "github.com/odigos-io/opentelemetry-zap-bridge"
 
 	v1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
-	podv1 "github.com/odigos-io/odigos/api/v1"
 	"github.com/odigos-io/odigos/common"
 
 	"github.com/odigos-io/odigos/instrumentor/controllers/deleteinstrumentedapplication"
@@ -154,13 +151,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr.GetWebhookServer().Register("/mutate-core-v1-pod", &webhook.Admission{
-		Handler: &podv1.PodInstrument{
-			Client:  mgr.GetClient(),
-			Decoder: admission.NewDecoder(mgr.GetScheme()),
-		},
-	})
-
 	if setupMgr, err := createSetupManager(); err == nil {
 		mgr.Add(setupMgr)
 	} else {
@@ -195,7 +185,6 @@ func createSetupManager() (*setup.SetupManager, error) {
 	}
 
 	// 创建新的k8s client
-	// !!!不能使用 mgr.GetClient, 因为此时的Client是从缓存中读取
 	k8sCfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
