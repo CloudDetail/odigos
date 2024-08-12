@@ -24,7 +24,7 @@ const (
 )
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
-	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
+
 	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.OtelSdkNativeCommunity)
 	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.OtelSdkNativeCommunity)
 
@@ -32,16 +32,23 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 	metricsExporter := "none"
 	tracesExporter := "none"
 
-	// Set the values based on the signals exists in the map
-	if _, ok := uniqueDestinationSignals[common.LogsObservabilitySignal]; ok {
-		logsExporter = "otlp"
-	}
-	if _, ok := uniqueDestinationSignals[common.MetricsObservabilitySignal]; ok {
-		metricsExporter = "otlp"
-	}
-	if _, ok := uniqueDestinationSignals[common.TracesObservabilitySignal]; ok {
+	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
+	if len(env.Current.OtlpGrpcEndpoint) > 0 {
+		otlpEndpoint = env.Current.OtlpGrpcEndpoint
 		tracesExporter = "otlp"
 	}
+
+	// 不使用odigos的destination逻辑
+	// Set the values based on the signals exists in the map
+	// if _, ok := uniqueDestinationSignals[common.LogsObservabilitySignal]; ok {
+	// 	logsExporter = "otlp"
+	// }
+	// if _, ok := uniqueDestinationSignals[common.MetricsObservabilitySignal]; ok {
+	// 	metricsExporter = "otlp"
+	// }
+	// if _, ok := uniqueDestinationSignals[common.TracesObservabilitySignal]; ok {
+	// 	tracesExporter = "otlp"
+	// }
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{

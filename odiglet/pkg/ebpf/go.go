@@ -25,10 +25,14 @@ func NewGoInstrumentationFactory() InstrumentationFactory[*GoOtelEbpfSdk] {
 }
 
 func (g *GoInstrumentationFactory) CreateEbpfInstrumentation(ctx context.Context, pid int, serviceName string, podWorkload *common.PodWorkload, containerName string, podName string, loadedIndicator chan struct{}) (*GoOtelEbpfSdk, error) {
+	otlpendpoint := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OTLPPort)
+	if len(env.Current.OtlpGrpcEndpoint) > 0 {
+		otlpendpoint = env.Current.OtlpGrpcEndpoint
+	}
 	defaultExporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OTLPPort)),
+		otlptracegrpc.WithEndpoint(otlpendpoint),
 	)
 	if err != nil {
 		log.Logger.Error(err, "failed to create exporter")

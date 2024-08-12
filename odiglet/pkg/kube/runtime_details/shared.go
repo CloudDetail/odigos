@@ -2,6 +2,7 @@ package runtime_details
 
 import (
 	"context"
+
 	procdiscovery "github.com/odigos-io/odigos/procdiscovery/pkg/process"
 
 	"github.com/odigos-io/odigos/odiglet/pkg/process"
@@ -95,17 +96,18 @@ func runtimeInspection(pods []corev1.Pod, ignoredContainers []string) ([]odigosv
 				}
 			}
 
+			var envs []odigosv1.EnvVar
 			if inspectProc == nil {
 				log.Logger.V(0).Info("unable to detect language for any process", "pod", pod.Name, "container", container.Name, "namespace", pod.Namespace)
 				lang = common.UnknownProgrammingLanguage
+				envs = make([]odigosv1.EnvVar, 0)
 			} else if len(processes) > 1 {
 				log.Logger.V(0).Info("multiple processes found in pod container, only taking the first one with detected language into account", "pod", pod.Name, "container", container.Name, "namespace", pod.Namespace)
-			}
-
-			// Convert map to slice for k8s format
-			envs := make([]odigosv1.EnvVar, 0, len(inspectProc.Envs))
-			for envName, envValue := range inspectProc.Envs {
-				envs = append(envs, odigosv1.EnvVar{Name: envName, Value: envValue})
+				// Convert map to slice for k8s format
+				envs = make([]odigosv1.EnvVar, 0, len(inspectProc.Envs))
+				for envName, envValue := range inspectProc.Envs {
+					envs = append(envs, odigosv1.EnvVar{Name: envName, Value: envValue})
+				}
 			}
 
 			resultsMap[container.Name] = odigosv1.RuntimeDetailsByContainer{

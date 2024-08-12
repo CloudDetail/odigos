@@ -23,6 +23,9 @@ const (
 
 func Python(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
+	if len(env.Current.OtlpHTTPEndpoint) > 0 {
+		otlpEndpoint = env.Current.OtlpHTTPEndpoint
+	}
 	pythonpathVal, _ := envOverwrite.ValToAppend("PYTHONPATH", common.OtelSdkNativeCommunity)
 
 	return &v1beta1.ContainerAllocateResponse{

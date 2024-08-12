@@ -14,6 +14,8 @@ const (
 type Environment struct {
 	NodeName string
 	NodeIP   string
+
+	CustomOtlpENDPOINT
 }
 
 var Current Environment
@@ -32,6 +34,8 @@ func Load() error {
 	Current = Environment{
 		NodeName: nn,
 		NodeIP:   ni,
+
+		CustomOtlpENDPOINT: LoadCustomEndpoint(),
 	}
 	return nil
 }
