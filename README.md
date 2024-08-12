@@ -1,14 +1,10 @@
-<p align="center">
-    <a href="https://github.com/odigos-io/odigos/actions/workflows/publish-cli.yml" target="_blank">
-        <img src="https://github.com/odigos-io/odigos/actions/workflows/publish-cli.yml/badge.svg" alt="Release Odigos CLI" style="margin-right: 10px; border: 1px solid #007acc; border-radius: 4px; padding: 5px;">
-    </a>
-    <a href="https://goreportcard.com/report/github.com/odigos-io/odigos/cli" target="_blank">
-        <img src="https://goreportcard.com/badge/github.com/odigos-io/odigos/cli" alt="Go Report Card" style="margin-right: 10px; border: 1px solid #4CAF50; border-radius: 4px; padding: 5px;">
-    </a>
-    <a href="https://godoc.org/github.com/odigos-io/odigos/cli" target="_blank">
-        <img src="https://godoc.org/github.com/odigos-io/odigos/cli?status.svg" alt="GoDoc" style="border: 1px solid #f39c12; border-radius: 4px; padding: 5px;">
-    </a>
-</p>
+### 修改说明
+
+在[Odigos](https://github.com/odigos-io/odigos/tree/v1.0.76s) 基础上进行了如下修改:
+
+1. 使用Webhook拆分了探针注入流程,现在用户选择需要注入探针的应用后,应用不再会立即重启并应用探针;而是等到下次用户手动重启应用才注入探针;
+2. 改用了自定义的(JAVA/Python/NodeJS)探针
+3. 移除了探针对Odigos-Collector的直接依赖,允许用户通过环境变量自定义接收端点
 
 
 <p align="center">
@@ -23,22 +19,22 @@
 
 ### ✨ Language Agnostic Auto-instrumentation
 
-Odigos supports any application written in Java, Python, .NET, Node.js, and **Go**.  
+Odigos supports any application written in Java, Python, .NET, Node.js, and **Go**.
 Historically, compiled languages like Go have been difficult to instrument without code changes. Odigos solves this problem by uniquely leveraging [eBPF](https://ebpf.io).
 
 ![Works on any application](assets/choose_apps.png)
 
 
 ### 🤝 Keep your existing observability tools
-Odigos currently supports all the popular managed and open-source destinations.  
+Odigos currently supports all the popular managed and open-source destinations.
 By producing data in the [OpenTelemetry](https://opentelemetry.io) format, Odigos can be used with any observability tool that supports OTLP.
 
 For a complete list of supported destinations, see [here](#supported-destinations).
 
 ![Works with any observability tool](assets/choose_dest.png)
 
-### 🎛️ Collectors Management 
-Odigos automatically scales OpenTelemetry collectors based on observability data volume.  
+### 🎛️ Collectors Management
+Odigos automatically scales OpenTelemetry collectors based on observability data volume.
 Manage and configure collectors via a convenient web UI.
 
 ![Collectors Management](assets/overview_page.png)
