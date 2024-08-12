@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/odigos-io/odigos/common/consts"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -40,10 +41,12 @@ import (
 	"github.com/odigos-io/odigos/instrumentor/controllers/deleteinstrumentedapplication"
 	"github.com/odigos-io/odigos/instrumentor/controllers/instrumentationdevice"
 	"github.com/odigos-io/odigos/instrumentor/report"
+	"github.com/odigos-io/odigos/instrumentor/setup"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -148,6 +151,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if setupMgr, err := createSetupManager(); err == nil {
+		mgr.Add(setupMgr)
+	} else {
+		setupLog.Error(err, "unable to create setup manager")
+	}
+
 	go common.StartPprofServer(setupLog)
 
 	if !telemetryDisabled {
@@ -159,4 +168,31 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func createSetupManager() (*setup.SetupManager, error) {
+	path, find := os.LookupEnv("INSTRUMENT_CONFIGS_PATH")
+	if !find {
+		path = "config/instrument-conf.yaml"
+	}
+
+	// 读取setup配置
+	setupCfg := viper.New()
+	setupCfg.SetConfigFile(path)
+	err := setupCfg.ReadInConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建新的k8s client
+	k8sCfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	client, err := client.New(k8sCfg, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+	smgr := setup.NewSetupManager(setupLog, setupCfg, client)
+	return smgr, nil
 }

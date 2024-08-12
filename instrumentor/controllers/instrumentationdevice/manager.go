@@ -2,12 +2,16 @@ package instrumentationdevice
 
 import (
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
+	v1 "github.com/odigos-io/odigos/api/v1"
 	k8sutils "github.com/odigos-io/odigos/k8sutils/pkg/client"
 	appsv1 "k8s.io/api/apps/v1"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 type workloadEnvChangePredicate struct {
@@ -132,6 +136,13 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+
+	mgr.GetWebhookServer().Register("/mutate-core-v1-pod", &webhook.Admission{
+		Handler: &v1.PodInstrument{
+			Client:  clientWithFallback,
+			Decoder: admission.NewDecoder(mgr.GetScheme()),
+		},
+	})
 
 	return nil
 }

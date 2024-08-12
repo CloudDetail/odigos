@@ -86,7 +86,7 @@ func reconcileSingleInstrumentedApplication(ctx context.Context, kubeClient clie
 		return nil
 	}
 
-	if !isDataCollectionReady(ctx, kubeClient) {
+	if !ENABLE_CUSTOM_COLLECTOR && !isDataCollectionReady(ctx, kubeClient) {
 		err := removeInstrumentation(logger, ctx, kubeClient, runtimeDetailsNamespacedName, UnInstrumentReasonDataCollectionNotReady)
 		if err != nil {
 			logger.Error(err, "error removing instrumentation")

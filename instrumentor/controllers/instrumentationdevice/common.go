@@ -2,6 +2,8 @@ package instrumentationdevice
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 
 	"github.com/go-logr/logr"
@@ -11,6 +13,7 @@ import (
 	"github.com/odigos-io/odigos/k8sutils/pkg/conditions"
 	"github.com/odigos-io/odigos/k8sutils/pkg/env"
 	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
+	"gomodules.xyz/jsonpatch/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -78,12 +81,50 @@ func instrument(logger logr.Logger, ctx context.Context, kubeClient client.Clien
 	}
 
 	result, err := controllerutil.CreateOrPatch(ctx, kubeClient, obj, func() error {
-		podSpec, err := getPodSpecFromObject(obj)
+		deepCpObj := obj.DeepCopyObject().(client.Object)
+
+		podSpec, err := getPodSpecFromObject(deepCpObj)
 		if err != nil {
 			return err
 		}
 
-		return instrumentation.ApplyInstrumentationDevicesToPodTemplate(podSpec, runtimeDetails, odigosConfig.Spec.DefaultSDKs, obj)
+		err = instrumentation.ApplyInstrumentationDevicesToPodTemplate(podSpec, runtimeDetails, odigosConfig.Spec.DefaultSDKs, deepCpObj)
+		if err != nil {
+			return err
+		}
+
+		rawPodSpec, err := getPodSpecFromObject(obj)
+		if err != nil {
+			return err
+		}
+		rawMarshaledPodSpec, err := json.Marshal(rawPodSpec)
+		if err != nil {
+			return err
+		}
+		marshaledPodSpec, err := json.Marshal(podSpec)
+		if err != nil {
+			return err
+		}
+		patches, err := jsonpatch.CreatePatch(rawMarshaledPodSpec, marshaledPodSpec)
+		if err != nil {
+			return err
+		}
+		patchBytes, err := json.Marshal(patches)
+		if err != nil {
+			return err
+		}
+		if len(patchBytes) > 0 {
+			patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
+			if obj.GetAnnotations() == nil {
+				obj.SetAnnotations(map[string]string{
+					"originx-instrument-patch": patchBytesBase64,
+				})
+			} else {
+				obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+			}
+		}
+
+		return nil
 	})
 
 	if err != nil {
@@ -121,18 +162,47 @@ func uninstrument(logger logr.Logger, ctx context.Context, kubeClient client.Cli
 
 	result, err := controllerutil.CreateOrPatch(ctx, kubeClient, obj, func() error {
 
+		// Create a deep copy of the object to avoid modifying the original object in place
+		deepCpObj := obj.DeepCopyObject().(client.Object)
+
 		// clear old ebpf instrumentation annotation, just in case it still exists
-		clearInstrumentationEbpf(obj)
-		podSpec, err := getPodSpecFromObject(obj)
+		clearInstrumentationEbpf(deepCpObj)
+		podSpec, err := getPodSpecFromObject(deepCpObj)
 		if err != nil {
 			return err
 		}
 
 		instrumentation.RevertInstrumentationDevices(podSpec)
-		err = instrumentation.RevertEnvOverwrites(obj, podSpec)
+		err = instrumentation.RevertEnvOverwrites(deepCpObj, podSpec)
 		if err != nil {
 			return err
 		}
+
+		rawPodSpec, err := getPodSpecFromObject(obj)
+		if err != nil {
+			return err
+		}
+		rawMarshaledPodSpec, err := json.Marshal(rawPodSpec)
+		if err != nil {
+			return err
+		}
+		marshaledPodSpec, err := json.Marshal(podSpec)
+		if err != nil {
+			return err
+		}
+		patches, err := jsonpatch.CreatePatch(rawMarshaledPodSpec, marshaledPodSpec)
+		if err != nil {
+			return err
+		}
+		patchBytes, err := json.Marshal(patches)
+		if err != nil {
+			return err
+		}
+		if len(patchBytes) > 0 {
+			patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
+			obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+		}
+
 		return nil
 	})
 

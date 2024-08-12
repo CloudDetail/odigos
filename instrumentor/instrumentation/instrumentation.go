@@ -11,6 +11,7 @@ import (
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	"github.com/odigos-io/odigos/common"
 	"github.com/odigos-io/odigos/k8sutils/pkg/envoverwrite"
+	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -204,7 +205,25 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		}
 	}
 
-	// Step 3: update the container with the new env vars
+	// Step 3: auto discovery service name (OTEL_SERVICE_NAME)
+	if _, find := observedEnvs["OTEL_SERVICE_NAME"]; !find {
+		name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
+		if err == nil {
+			if name == container.Name {
+				newEnvs = append(newEnvs, corev1.EnvVar{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: container.Name,
+				})
+			} else {
+				newEnvs = append(newEnvs, corev1.EnvVar{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: fmt.Sprintf("%s-%s", name, container.Name),
+				})
+			}
+		}
+	}
+
+	// Step 4: update the container with the new env vars
 	container.Env = newEnvs
 
 	return nil
