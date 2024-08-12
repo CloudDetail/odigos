@@ -115,7 +115,13 @@ func instrument(logger logr.Logger, ctx context.Context, kubeClient client.Clien
 		}
 		if len(patchBytes) > 0 {
 			patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
-			obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+			if obj.GetAnnotations() == nil {
+				obj.SetAnnotations(map[string]string{
+					"originx-instrument-patch": patchBytesBase64,
+				})
+			} else {
+				obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+			}
 		}
 
 		return nil
