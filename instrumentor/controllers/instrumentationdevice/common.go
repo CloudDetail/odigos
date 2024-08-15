@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
@@ -122,6 +123,14 @@ func instrument(logger logr.Logger, ctx context.Context, kubeClient client.Clien
 			} else {
 				obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
 			}
+
+			if obj.GetLabels() == nil {
+				obj.SetLabels(map[string]string{
+					consts.OdigosInstrumentationLabel: consts.InstrumentationEnabled,
+				})
+			} else {
+				obj.GetLabels()[consts.OdigosInstrumentationLabel] = consts.InstrumentationEnabled
+			}
 		}
 
 		return nil
@@ -161,48 +170,8 @@ func uninstrument(logger logr.Logger, ctx context.Context, kubeClient client.Cli
 	}
 
 	result, err := controllerutil.CreateOrPatch(ctx, kubeClient, obj, func() error {
-
-		// Create a deep copy of the object to avoid modifying the original object in place
-		deepCpObj := obj.DeepCopyObject().(client.Object)
-
-		// clear old ebpf instrumentation annotation, just in case it still exists
-		clearInstrumentationEbpf(deepCpObj)
-		podSpec, err := getPodSpecFromObject(deepCpObj)
-		if err != nil {
-			return err
-		}
-
-		instrumentation.RevertInstrumentationDevices(podSpec)
-		err = instrumentation.RevertEnvOverwrites(deepCpObj, podSpec)
-		if err != nil {
-			return err
-		}
-
-		rawPodSpec, err := getPodSpecFromObject(obj)
-		if err != nil {
-			return err
-		}
-		rawMarshaledPodSpec, err := json.Marshal(rawPodSpec)
-		if err != nil {
-			return err
-		}
-		marshaledPodSpec, err := json.Marshal(podSpec)
-		if err != nil {
-			return err
-		}
-		patches, err := jsonpatch.CreatePatch(rawMarshaledPodSpec, marshaledPodSpec)
-		if err != nil {
-			return err
-		}
-		patchBytes, err := json.Marshal(patches)
-		if err != nil {
-			return err
-		}
-		if len(patchBytes) > 0 {
-			patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
-			obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
-		}
-
+		annos := obj.GetAnnotations()
+		delete(annos, "originx-instrument-patch")
 		return nil
 	})
 
@@ -252,6 +221,34 @@ func getPodSpecFromObject(obj client.Object) (*corev1.PodTemplateSpec, error) {
 	}
 }
 
+func getInstrumentEnabledLabelFromObject(obj client.Object) bool {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if labels := o.GetLabels(); labels != nil {
+			if labels[consts.OdigosInstrumentationLabel] == "enabled" {
+				return true
+			}
+		}
+		return false
+	case *appsv1.StatefulSet:
+		if labels := o.GetLabels(); labels != nil {
+			if labels[consts.OdigosInstrumentationLabel] == "enabled" {
+				return true
+			}
+		}
+		return false
+	case *appsv1.DaemonSet:
+		if labels := o.GetLabels(); labels != nil {
+			if labels[consts.OdigosInstrumentationLabel] == "enabled" {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 func getObjectFromKindString(kind string) (client.Object, error) {
 	switch kind {
 	case "Deployment":
@@ -262,5 +259,18 @@ func getObjectFromKindString(kind string) (client.Object, error) {
 		return &appsv1.DaemonSet{}, nil
 	default:
 		return nil, errors.New("unknown kind")
+	}
+}
+
+func getWorkloadKeyFromObject(obj client.Object) string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		return fmt.Sprintf("deployment/%s", o.Name)
+	case *appsv1.StatefulSet:
+		return fmt.Sprintf("statefulset/%s", o.Name)
+	case *appsv1.DaemonSet:
+		return fmt.Sprintf("daemonset/%s", o.Name)
+	default:
+		return ""
 	}
 }

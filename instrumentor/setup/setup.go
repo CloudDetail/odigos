@@ -13,7 +13,7 @@ import (
 
 // 读取启动配置,对现有的注入项进行设置
 type SetupManager struct {
-	cfg    *viper.Viper
+	Cfg    *viper.Viper
 	client client.Client
 	logger logr.Logger
 
@@ -23,7 +23,7 @@ type SetupManager struct {
 
 func NewSetupManager(logger logr.Logger, cfg *viper.Viper, client client.Client) *SetupManager {
 	setup := &SetupManager{
-		cfg:        cfg,
+		Cfg:        cfg,
 		client:     client,
 		logger:     logger,
 		namespaces: NamespaceInstrumentRule{},
@@ -35,8 +35,8 @@ func NewSetupManager(logger logr.Logger, cfg *viper.Viper, client client.Client)
 func (m *SetupManager) Start(context.Context) error {
 	m.UpdateAnnotationsByRule()
 	m.logger.Info("setup manager sync config done")
-	m.cfg.WatchConfig()
-	m.cfg.OnConfigChange(func(e fsnotify.Event) {
+	m.Cfg.WatchConfig()
+	m.Cfg.OnConfigChange(func(e fsnotify.Event) {
 		m.UpdateAnnotationsByRule()
 		m.logger.Info("setup manager sync config done")
 	})
@@ -45,8 +45,8 @@ func (m *SetupManager) Start(context.Context) error {
 
 func (m *SetupManager) UpdateAnnotationsByRule() {
 	var instrumentAll, forceInstrumentAll bool
-	instrumentAll = m.cfg.GetBool("instrument-all-namespace")
-	forceInstrumentAll = m.cfg.GetBool("force-instrument-all-namespace")
+	instrumentAll = m.Cfg.GetBool("instrument-all-namespace")
+	forceInstrumentAll = m.Cfg.GetBool("force-instrument-all-namespace")
 	m.logger.Info("update annotations", "instrument-all-namespace", instrumentAll, "force-instrument-all-namespace", forceInstrumentAll)
 	// 强制注入所有的NS和workload
 	if forceInstrumentAll {
@@ -62,14 +62,14 @@ func (m *SetupManager) UpdateAnnotationsByRule() {
 
 	// TODO deal with error
 	// 对所有可访问的NS(跳过kube-system)添加注入标记
-	nsList, err := m.namespaces.InstrumentWithCfg(m.logger, m.client, m.cfg, instrumentAll)
+	nsList, err := m.namespaces.InstrumentWithCfg(m.logger, m.client, m.Cfg, instrumentAll)
 	if err != nil {
 		m.logger.Error(err, "error instrument namespace")
 	}
 	// 同时向所有可访问的workload添加注入标记
 	for _, namespace := range nsList {
 		// TODO deal with error
-		err := m.workloads.InstrumentWithCfg(m.logger, m.client, namespace, m.cfg, instrumentAll)
+		err := m.workloads.InstrumentWithCfg(m.logger, m.client, namespace, m.Cfg, instrumentAll)
 		if err != nil {
 			m.logger.Error(err, "error instrument workload", "namespace", namespace)
 		}
@@ -83,12 +83,14 @@ type SetupRule interface {
 
 func getJsonMergePatchForInstrumentationLabel(enabled bool) []byte {
 	labelJsonMergePatchValue := "null"
+	annotationsPatch := ""
 	if enabled {
 		labelJsonMergePatchValue = fmt.Sprintf("\"%s\"", consts.InstrumentationEnabled)
 	} else {
 		labelJsonMergePatchValue = fmt.Sprintf("\"%s\"", consts.InstrumentationDisabled)
+		annotationsPatch = `,"annotations":{"originx-instrument-patch":null}`
 	}
 
-	jsonMergePatchContent := fmt.Sprintf(`{"metadata":{"labels":{"%s":%s}}}`, consts.OdigosInstrumentationLabel, labelJsonMergePatchValue)
+	jsonMergePatchContent := fmt.Sprintf(`{"metadata":{"labels":{"%s":%s}%s}}`, consts.OdigosInstrumentationLabel, labelJsonMergePatchValue, annotationsPatch)
 	return []byte(jsonMergePatchContent)
 }

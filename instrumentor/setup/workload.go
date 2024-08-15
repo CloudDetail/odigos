@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
@@ -106,13 +105,16 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, statefulset := range statefulset.Items {
-		op, find := namespacedCfg[workloadId(statefulset.Kind, statefulset.Name)]
+		op, find := namespacedCfg[getWorkloadKeyFromObject(&statefulset)]
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := statefulset.GetLabels()[consts.OdigosInstrumentationLabel]
-			if !find || value == "disabled" {
+			if find && value == "disabled" {
+				continue
+			} else if !find && !defaultEnable {
 				continue
 			}
+
 			logger.Info("uninstrument statefulset", "namespace", statefulset.Namespace, "name", statefulset.Name)
 		} else {
 			logger.Info("instrument statefulset", "namespace", statefulset.Namespace, "name", statefulset.Name)
@@ -129,7 +131,12 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, deployment := range deployments.Items {
-		op, find := namespacedCfg[workloadId(deployment.Kind, deployment.Name)]
+		op, find := namespacedCfg[getWorkloadKeyFromObject(&deployment)]
+		if find {
+			logger.Info("find deployment config", "namespace", deployment.Namespace, "name", deployment.Name)
+		} else {
+			logger.Info("not find deployment config", "workloadId", getWorkloadKeyFromObject(&deployment))
+		}
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := deployment.GetLabels()[consts.OdigosInstrumentationLabel]
@@ -141,6 +148,8 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 			logger.Info("instrument deployment", "namespace", deployment.Namespace, "name", deployment.Name)
 		}
 		patch := getJsonMergePatchForInstrumentationLabel(isEnabled)
+
+		logger.Info("patch deployment", "namespace", deployment.Namespace, "name", deployment.Name, "patch", string(patch))
 		if err := c.Patch(context.Background(), &deployment, client.RawPatch(types.MergePatchType, patch)); err != nil {
 			return err
 		}
@@ -152,7 +161,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, daemonset := range daemonsets.Items {
-		op, find := namespacedCfg[workloadId(daemonset.Kind, daemonset.Name)]
+		op, find := namespacedCfg[getWorkloadKeyFromObject(&daemonset)]
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := daemonset.GetLabels()[consts.OdigosInstrumentationLabel]
@@ -172,8 +181,17 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	return nil
 }
 
-func workloadId(kind string, name string) string {
-	return fmt.Sprintf("%s/%s", strings.ToLower(kind), strings.ToLower(name))
+func getWorkloadKeyFromObject(obj client.Object) string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		return fmt.Sprintf("deployment/%s", o.Name)
+	case *appsv1.StatefulSet:
+		return fmt.Sprintf("statefulset/%s", o.Name)
+	case *appsv1.DaemonSet:
+		return fmt.Sprintf("daemonset/%s", o.Name)
+	default:
+		return ""
+	}
 }
 
 func checkIsWorkloadEnabled(find bool, op any, def bool) bool {
