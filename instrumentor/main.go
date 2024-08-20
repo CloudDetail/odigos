@@ -24,7 +24,6 @@ import (
 
 	"github.com/odigos-io/odigos/common/consts"
 	"github.com/spf13/viper"
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -108,15 +107,6 @@ func main() {
 		Cache: cache.Options{
 			DefaultTransform: cache.TransformStripManagedFields(),
 			ByObject: map[client.Object]cache.ByObject{
-				&appsv1.Deployment{}: {
-					Label: instrumentedSelector,
-				},
-				&appsv1.StatefulSet{}: {
-					Label: instrumentedSelector,
-				},
-				&appsv1.DaemonSet{}: {
-					Label: instrumentedSelector,
-				},
 				&corev1.Namespace{}: {
 					Label: instrumentedSelector,
 				},
@@ -128,7 +118,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = instrumentationdevice.SetupWithManager(mgr)
+	setupMgr, err := createSetupManager()
+	if err == nil {
+		mgr.Add(setupMgr)
+	} else {
+		setupLog.Error(err, "unable to create setup manager")
+	}
+
+	if setupMgr != nil {
+		err = instrumentationdevice.SetupWithManager(mgr, setupMgr.Cfg)
+	} else {
+		err = instrumentationdevice.SetupWithManager(mgr, nil)
+	}
+
 	if err != nil {
 		setupLog.Error(err, "unable to create controller")
 		os.Exit(1)
@@ -149,12 +151,6 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
-	}
-
-	if setupMgr, err := createSetupManager(); err == nil {
-		mgr.Add(setupMgr)
-	} else {
-		setupLog.Error(err, "unable to create setup manager")
 	}
 
 	go common.StartPprofServer(setupLog)

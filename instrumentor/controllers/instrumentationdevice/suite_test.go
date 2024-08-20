@@ -98,7 +98,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	err = instrumentationdevice.SetupWithManager(k8sManager)
+	err = instrumentationdevice.SetupWithManager(k8sManager, nil)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
