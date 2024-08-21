@@ -205,26 +205,43 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		}
 	}
 
-	// Step 3: auto discovery service name (OTEL_SERVICE_NAME)
-	if _, find := observedEnvs["OTEL_SERVICE_NAME"]; !find {
-		name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
-		if err == nil {
-			if name == container.Name {
-				newEnvs = append(newEnvs, corev1.EnvVar{
-					Name:  "OTEL_SERVICE_NAME",
-					Value: container.Name,
-				})
-			} else {
-				newEnvs = append(newEnvs, corev1.EnvVar{
-					Name:  "OTEL_SERVICE_NAME",
-					Value: fmt.Sprintf("%s-%s", name, container.Name),
-				})
-			}
-		}
+	// Step 3: auto discovery service name
+	svcNameEnv, ok := autoDiscoverServiceName(runtimeDetails, container, observedEnvs, sdk)
+	if ok {
+		newEnvs = append(newEnvs, *svcNameEnv)
 	}
 
 	// Step 4: update the container with the new env vars
 	container.Env = newEnvs
 
 	return nil
+}
+
+func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, observedEnvs map[string]string, sdk common.OtelSdk) (*corev1.EnvVar, bool) {
+	serviceEnvName, find := envOverwrite.ServiceNameEnv(sdk)
+	if !find {
+		return nil, false
+	}
+
+	// 用户手动设置了ServiceName
+	if _, find := observedEnvs[serviceEnvName]; find {
+		return nil, false
+	}
+
+	name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
+	if err != nil {
+		return nil, false
+	}
+
+	if name == container.Name {
+		return &corev1.EnvVar{
+			Name:  serviceEnvName,
+			Value: name,
+		}, true
+	}
+
+	return &corev1.EnvVar{
+		Name:  serviceEnvName,
+		Value: fmt.Sprintf("%s-%s", name, container.Name),
+	}, true
 }

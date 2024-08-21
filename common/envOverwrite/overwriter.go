@@ -40,6 +40,8 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkEbpfEnterprise:  "-javaagent:/var/odigos/java-ebpf/dtrace-injector.jar",
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
+
+			common.SWSdkNativeCommunity: "-javaagent:/var/skywalking/java/javaagent.jar",
 		},
 	},
 	"JAVA_TOOL_OPTIONS": {
@@ -49,6 +51,16 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkEbpfEnterprise:  "-javaagent:/var/odigos/java-ebpf/dtrace-injector.jar",
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
+			common.SWSdkNativeCommunity: "-javaagent:/var/skywalking/java/javaagent.jar",
+		},
+	},
+	"OTEL_SERVICE_NAME": {
+		delim: " ",
+		values: map[common.OtelSdk]string{
+			common.OtelSdkNativeCommunity:  "OTEL_SERVICE_NAME",
+			common.OtelSdkEbpfEnterprise:   "OTEL_SERVICE_NAME",
+			common.OtelSdkNativeEnterprise: "OTEL_SERVICE_NAME",
+			common.SWSdkNativeCommunity:    "",
 		},
 	},
 }
@@ -125,4 +137,15 @@ func ValToAppend(envName string, sdk common.OtelSdk) (string, bool) {
 	}
 
 	return valToAppend, true
+}
+
+func ServiceNameEnv(sdk common.OtelSdk) (string, bool) {
+	switch sdk.SdkType {
+	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
+		return "OTEL_SERVICE_NAME", true
+	case common.SWSdkType:
+		return "SW_AGENT_NAME", true
+	default:
+		return "", false
+	}
 }

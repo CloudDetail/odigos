@@ -11,6 +11,8 @@ const (
 	// EbpfOtelSdkType SDK can record telemetry data from the application with eBPF
 	// code injected into the application process.
 	EbpfOtelSdkType OtelSdkType = "ebpf"
+
+	SWSdkType OtelSdkType = "skywalking"
 )
 
 type OtelSdkTier string
@@ -30,4 +32,6 @@ var (
 	OtelSdkEbpfCommunity    = OtelSdk{SdkType: EbpfOtelSdkType, SdkTier: CommunityOtelSdkTier}
 	OtelSdkNativeEnterprise = OtelSdk{SdkType: NativeOtelSdkType, SdkTier: EnterpriseOtelSdkTier}
 	OtelSdkEbpfEnterprise   = OtelSdk{SdkType: EbpfOtelSdkType, SdkTier: EnterpriseOtelSdkTier}
+
+	SWSdkNativeCommunity = OtelSdk{SdkType: SWSdkType, SdkTier: CommunityOtelSdkTier}
 )
