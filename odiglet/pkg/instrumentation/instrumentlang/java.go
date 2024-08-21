@@ -21,6 +21,8 @@ const (
 	javaOtelMetricsExporterEnvVar = "OTEL_METRICS_EXPORTER"
 	javaOtelTracesExporterEnvVar  = "OTEL_TRACES_EXPORTER"
 	javaOtelTracesSamplerEnvVar   = "OTEL_TRACES_SAMPLER"
+
+	swCollectorBackendServiceEnvVar = "SW_AGENT_COLLECTOR_BACKEND_SERVICES"
 )
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
@@ -66,6 +68,31 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 			{
 				ContainerPath: "/var/odigos/java",
 				HostPath:      "/var/odigos/java",
+				ReadOnly:      true,
+			},
+		},
+	}
+}
+
+func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
+	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.SWSdkNativeCommunity)
+	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.SWSdkNativeCommunity)
+
+	var envs = map[string]string{
+		javaToolOptionsEnvVar: javaToolOptionsVal,
+		javaOptsEnvVar:        javaOptsVal,
+	}
+	var swCollectorEndpoint string
+	if len(env.Current.SWCollectorEndpoint) > 0 {
+		envs[swCollectorBackendServiceEnvVar] = swCollectorEndpoint
+	}
+
+	return &v1beta1.ContainerAllocateResponse{
+		Envs: envs,
+		Mounts: []*v1beta1.Mount{
+			{
+				ContainerPath: "/var/skywalking/java",
+				HostPath:      "/var/skywalking/java",
 				ReadOnly:      true,
 			},
 		},
