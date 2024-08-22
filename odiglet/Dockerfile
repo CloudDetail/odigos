@@ -1,3 +1,5 @@
+FROM apache/skywalking-java-agent:9.3.0-alpine as sw_agent
+
 
 FROM keyval/odiglet-base:v1.4 as builder
 WORKDIR /go/src/github.com/odigos-io/odigos
@@ -22,6 +24,9 @@ WORKDIR /instrumentations
 ARG JAVA_OTEL_VERSION=v2.3.0
 ADD ./opentelemetry-javaagent.jar /instrumentations/java/javaagent.jar
 RUN chmod 644 /instrumentations/java/javaagent.jar
+
+# Skywalking JAVA
+COPY --from=sw_agent /skywalking/agent /instrumentations/skywalking/java
 
 # Python
 COPY ./python-instrumentation-originx/workspace/ /instrumentations/python

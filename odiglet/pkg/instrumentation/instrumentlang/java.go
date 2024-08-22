@@ -23,6 +23,11 @@ const (
 	javaOtelTracesSamplerEnvVar   = "OTEL_TRACES_SAMPLER"
 
 	swCollectorBackendServiceEnvVar = "SW_AGENT_COLLECTOR_BACKEND_SERVICES"
+	swLOGGING_OUTPUT                = "SW_LOGGING_OUTPUT"
+	swLOGGING_DIR                   = "SW_LOGGING_DIR"
+	swLOGGING_FILE_NAME             = "SW_LOGGING_FILE_NAME"
+	swLOGGING_MAX_FILE_SIZE         = "SW_LOGGING_MAX_FILE_SIZE"
+	swLOGGING_MAX_HISTORY_FILES     = "SW_LOGGING_MAX_HISTORY_FILES"
 )
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
@@ -35,22 +40,10 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 	tracesExporter := "none"
 
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
-	if len(env.Current.OtlpGrpcEndpoint) > 0 {
-		otlpEndpoint = env.Current.OtlpGrpcEndpoint
+	if len(env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT) > 0 {
+		otlpEndpoint = env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT
 		tracesExporter = "otlp"
 	}
-
-	// 不使用odigos的destination逻辑
-	// Set the values based on the signals exists in the map
-	// if _, ok := uniqueDestinationSignals[common.LogsObservabilitySignal]; ok {
-	// 	logsExporter = "otlp"
-	// }
-	// if _, ok := uniqueDestinationSignals[common.MetricsObservabilitySignal]; ok {
-	// 	metricsExporter = "otlp"
-	// }
-	// if _, ok := uniqueDestinationSignals[common.TracesObservabilitySignal]; ok {
-	// 	tracesExporter = "otlp"
-	// }
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
@@ -82,17 +75,37 @@ func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.Obser
 		javaToolOptionsEnvVar: javaToolOptionsVal,
 		javaOptsEnvVar:        javaOptsVal,
 	}
-	var swCollectorEndpoint string
-	if len(env.Current.SWCollectorEndpoint) > 0 {
-		envs[swCollectorBackendServiceEnvVar] = swCollectorEndpoint
+
+	if len(env.Current.SW_AGENT_COLLECTOR_BACKEND_SERVICES) > 0 {
+		envs[swCollectorBackendServiceEnvVar] = env.Current.SW_AGENT_COLLECTOR_BACKEND_SERVICES
+	} else {
+		envs[swCollectorBackendServiceEnvVar] = fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.SWAgentPort)
+	}
+
+	if len(env.Current.SW_LOGGING_OUTPUT) > 0 {
+		envs[swLOGGING_OUTPUT] = env.Current.SW_LOGGING_OUTPUT
+		if len(env.Current.SW_LOGGING_DIR) > 0 {
+			envs[swLOGGING_DIR] = env.Current.SW_LOGGING_DIR
+		}
+		if len(env.Current.SW_LOGGING_FILE_NAME) > 0 {
+			envs[swLOGGING_FILE_NAME] = env.Current.SW_LOGGING_FILE_NAME
+		}
+		if len(env.Current.SW_LOGGING_MAX_FILE_SIZE) > 0 {
+			envs[swLOGGING_MAX_FILE_SIZE] = env.Current.SW_LOGGING_MAX_FILE_SIZE
+		}
+		if len(env.Current.SW_LOGGING_MAX_HISTORY_FILES) > 0 {
+			envs[swLOGGING_MAX_HISTORY_FILES] = env.Current.SW_LOGGING_MAX_HISTORY_FILES
+		}
+	} else {
+		envs[swLOGGING_OUTPUT] = "CONSOLE"
 	}
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: envs,
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/skywalking/java",
-				HostPath:      "/var/skywalking/java",
+				ContainerPath: "/var/odigos/skywalking",
+				HostPath:      "/var/odigos/skywalking",
 				ReadOnly:      true,
 			},
 		},

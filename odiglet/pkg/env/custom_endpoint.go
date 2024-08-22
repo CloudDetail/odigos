@@ -2,60 +2,51 @@ package env
 
 import (
 	"os"
-	"strings"
+	"reflect"
 )
 
-const (
-	OTEL_EXPORTER_OTLP_GRPC_ENDPOINT = "OTEL_EXPORTER_OTLP_GRPC_ENDPOINT"
-	OTEL_EXPORTER_OTLP_HTTP_ENDPOINT = "OTEL_EXPORTER_OTLP_HTTP_ENDPOINT"
-	OTEL_EXPORTER_OPAMP_ENDPOINT     = "OTEL_EXPORTER_OPAMP_ENDPOINT"
-	OTEL_AUTO_SERVICE_NAME           = "OTEL_AUTO_SERVICE_NAME"
+type CustomAgentConfig struct {
+	OTEL_EXPORTER_OTLP_GRPC_ENDPOINT string
+	OTEL_EXPORTER_OTLP_HTTP_ENDPOINT string
+	OTEL_EXPORTER_OPAMP_ENDPOINT     string
 
-	SW_AGENT_COLLECTOR_BACKEND_SERVICES = "SW_AGENT_COLLECTOR_BACKEND_SERVICES"
-)
-
-type CustomOtlpENDPOINT struct {
-	OtlpHTTPEndpoint string
-	OtlpGrpcEndpoint string
-	OpAMPEndpoint    string
-
-	SWCollectorEndpoint string
-
-	AutoServiceName bool
+	SW_AGENT_COLLECTOR_BACKEND_SERVICES string
+	SW_LOGGING_OUTPUT                   string
+	SW_LOGGING_DIR                      string
+	SW_LOGGING_FILE_NAME                string
+	SW_LOGGING_LEVEL                    string
+	SW_LOGGING_MAX_HISTORY_FILES        string
+	SW_LOGGING_MAX_FILE_SIZE            string
 }
 
-func LoadCustomEndpoint() CustomOtlpENDPOINT {
-	httpEndpoint, ok := os.LookupEnv(OTEL_EXPORTER_OTLP_HTTP_ENDPOINT)
-	if !ok {
-		httpEndpoint = ""
+func DefaultCustomConfig() CustomAgentConfig {
+	return CustomAgentConfig{
+		SW_LOGGING_DIR: "/opt/skywalking/logs",
 	}
+}
 
-	grpcEndpoint, ok := os.LookupEnv(OTEL_EXPORTER_OTLP_GRPC_ENDPOINT)
-	if !ok {
-		grpcEndpoint = ""
-	}
+func LoadCustomAgentConfig() CustomAgentConfig {
+	cfg := DefaultCustomConfig()
+	return SetCustomConfigByEnv(cfg)
+}
 
-	opampEndpoint, ok := os.LookupEnv(OTEL_EXPORTER_OPAMP_ENDPOINT)
-	if !ok {
-		opampEndpoint = ""
-	}
+func SetCustomConfigByEnv(obj CustomAgentConfig) CustomAgentConfig {
+	val := reflect.ValueOf(obj).Elem()
+	typ := val.Type()
 
-	autoServiceOption := true
-	autoServiceName, ok := os.LookupEnv(OTEL_AUTO_SERVICE_NAME)
-	if !ok || strings.ToLower(autoServiceName) != "true" {
-		autoServiceOption = false
-	}
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := field.Type()
+		fieldName := typ.Field(i).Name
 
-	swCollectorService, ok := os.LookupEnv(SW_AGENT_COLLECTOR_BACKEND_SERVICES)
-	if !ok {
-		swCollectorService = ""
+		switch fieldType.Kind() {
+		case reflect.String:
+			if value, find := os.LookupEnv(fieldName); find {
+				field.SetString(value)
+			}
+		default:
+			// do nothing
+		}
 	}
-
-	return CustomOtlpENDPOINT{
-		OtlpHTTPEndpoint:    httpEndpoint,
-		OtlpGrpcEndpoint:    grpcEndpoint,
-		OpAMPEndpoint:       opampEndpoint,
-		AutoServiceName:     autoServiceOption,
-		SWCollectorEndpoint: swCollectorService,
-	}
+	return obj
 }

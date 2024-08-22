@@ -15,7 +15,7 @@ type Environment struct {
 	NodeName string
 	NodeIP   string
 
-	CustomOtlpENDPOINT
+	CustomAgentConfig
 }
 
 var Current Environment
@@ -35,7 +35,7 @@ func Load() error {
 		NodeName: nn,
 		NodeIP:   ni,
 
-		CustomOtlpENDPOINT: LoadCustomEndpoint(),
+		CustomAgentConfig: LoadCustomAgentConfig(),
 	}
 	return nil
 }

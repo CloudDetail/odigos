@@ -26,8 +26,8 @@ func NewGoInstrumentationFactory() InstrumentationFactory[*GoOtelEbpfSdk] {
 
 func (g *GoInstrumentationFactory) CreateEbpfInstrumentation(ctx context.Context, pid int, serviceName string, podWorkload *common.PodWorkload, containerName string, podName string, loadedIndicator chan struct{}) (*GoOtelEbpfSdk, error) {
 	otlpendpoint := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OTLPPort)
-	if len(env.Current.OtlpGrpcEndpoint) > 0 {
-		otlpendpoint = env.Current.OtlpGrpcEndpoint
+	if len(env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT) > 0 {
+		otlpendpoint = env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT
 	}
 	defaultExporter, err := otlptracegrpc.New(
 		ctx,

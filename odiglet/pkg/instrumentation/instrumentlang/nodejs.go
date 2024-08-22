@@ -21,13 +21,13 @@ const (
 
 func NodeJS(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
-	if len(env.Current.OtlpGrpcEndpoint) > 0 {
-		otlpEndpoint = env.Current.OtlpGrpcEndpoint
+	if len(env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT) > 0 {
+		otlpEndpoint = env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT
 	}
 	nodeOptionsVal, _ := envOverwrite.ValToAppend(nodeEnvNodeOptions, common.OtelSdkNativeCommunity)
 	opampServerHost := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OpAMPPort)
-	if len(env.Current.OpAMPEndpoint) > 0 {
-		opampServerHost = env.Current.OpAMPEndpoint
+	if len(env.Current.OTEL_EXPORTER_OPAMP_ENDPOINT) > 0 {
+		opampServerHost = env.Current.OTEL_EXPORTER_OPAMP_ENDPOINT
 	}
 
 	return &v1beta1.ContainerAllocateResponse{
