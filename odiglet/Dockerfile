@@ -11,6 +11,7 @@ WORKDIR /src/preload
 RUN mkdir -p /etc/apo/instrument && gcc -std=c99 -o /etc/apo/instrument/libapolanucher.so -shared launcher/lanucher.c -Wall -Wfatal-errors -fPIC -ldl
 RUN cd /src/preload/instrument && cargo build --release  && cp target/release/libapoinstrument.so /etc/apo/instrument/.
 COPY preload/.apo-config/* /etc/apo/instrument/.
+RUN chmod -R 755 /etc/apo/instrument/.
 
 FROM keyval/odiglet-base:v1.4 as builder
 WORKDIR /go/src/github.com/odigos-io/odigos

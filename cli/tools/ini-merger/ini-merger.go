@@ -99,8 +99,8 @@ func GetDefaultInternalValue() map[string]string {
 	}
 
 	return map[string]string{
-		"OTEL_EXPORTER_GRPC_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4317),
-		"OTEL_EXPORTER_HTTP_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4318),
-		"OTEL_EXPORTER_SKYWALING_ENDPOINT": fmt.Sprintf("http://%s:%d", val, 11800),
+		"APO_COLLECTOR_GRPC_ENDPOINT":       fmt.Sprintf("http://%s:%d", val, 4317),
+		"APO_COLLECTOR_HTTP_ENDPOINT":       fmt.Sprintf("http://%s:%d", val, 4318),
+		"APO_COLLECTOR_SKYWALKING_ENDPOINT": fmt.Sprintf("%s:%d", val, 11800),
 	}
 }

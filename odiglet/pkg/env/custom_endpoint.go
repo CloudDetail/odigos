@@ -6,18 +6,18 @@ import (
 )
 
 type CustomAgentConfig struct {
-	OTEL_EXPORTER_OTLP_GRPC_ENDPOINT string
-	OTEL_EXPORTER_OTLP_HTTP_ENDPOINT string
-	OTEL_EXPORTER_OPAMP_ENDPOINT     string
+	APO_COLLECTOR_GRPC_ENDPOINT  string
+	APO_COLLECTOR_HTTP_ENDPOINT  string
+	OTEL_EXPORTER_OPAMP_ENDPOINT string
 
-	SW_AGENT_COLLECTOR_BACKEND_SERVICES string
-	SW_LOGGING_OUTPUT                   string
-	SW_LOGGING_DIR                      string
-	SW_LOGGING_FILE_NAME                string
-	SW_LOGGING_LEVEL                    string
-	SW_LOGGING_MAX_HISTORY_FILES        string
-	SW_LOGGING_MAX_FILE_SIZE            string
-	SW_METER_ACTIVE                     string
+	APO_COLLECTOR_SKYWALKING_ENDPOINT string
+	SW_LOGGING_OUTPUT                 string
+	SW_LOGGING_DIR                    string
+	SW_LOGGING_FILE_NAME              string
+	SW_LOGGING_LEVEL                  string
+	SW_LOGGING_MAX_HISTORY_FILES      string
+	SW_LOGGING_MAX_FILE_SIZE          string
+	SW_METER_ACTIVE                   string
 }
 
 func DefaultCustomConfig() CustomAgentConfig {

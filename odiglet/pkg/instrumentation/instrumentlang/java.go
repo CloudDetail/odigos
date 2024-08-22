@@ -43,8 +43,8 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 	tracesExporter := "none"
 
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
-	if len(env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT) > 0 {
-		otlpEndpoint = env.Current.OTEL_EXPORTER_OTLP_GRPC_ENDPOINT
+	if len(env.Current.APO_COLLECTOR_GRPC_ENDPOINT) > 0 {
+		otlpEndpoint = env.Current.APO_COLLECTOR_GRPC_ENDPOINT
 		tracesExporter = "otlp"
 	}
 
@@ -79,8 +79,8 @@ func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.Obser
 		javaOptsEnvVar:        javaOptsVal,
 	}
 
-	if len(env.Current.SW_AGENT_COLLECTOR_BACKEND_SERVICES) > 0 {
-		envs[swCollectorBackendServiceEnvVar] = env.Current.SW_AGENT_COLLECTOR_BACKEND_SERVICES
+	if len(env.Current.APO_COLLECTOR_SKYWALKING_ENDPOINT) > 0 {
+		envs[swCollectorBackendServiceEnvVar] = env.Current.APO_COLLECTOR_SKYWALKING_ENDPOINT
 	} else {
 		envs[swCollectorBackendServiceEnvVar] = fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.SWAgentPort)
 	}
@@ -128,7 +128,7 @@ func JavaInCustomAgent(deviceId string, uniqueDestinationSignals map[common.Obse
 		Envs: envs,
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/etc/apo/custom",
+				ContainerPath: "/etc/apo/instrumentations/custom",
 				HostPath:      "/var/odigos/custom",
 				ReadOnly:      true,
 			},
@@ -178,8 +178,8 @@ func GetDefaultInternalValue() map[string]string {
 	}
 
 	return map[string]string{
-		"OTEL_EXPORTER_GRPC_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4317),
-		"OTEL_EXPORTER_HTTP_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4318),
-		"OTEL_EXPORTER_SKYWALING_ENDPOINT": fmt.Sprintf("http://%s:%d", val, 11800),
+		"APO_COLLECTOR_GRPC_ENDPOINT":       fmt.Sprintf("http://%s:%d", val, 4317),
+		"APO_COLLECTOR_HTTP_ENDPOINT":       fmt.Sprintf("http://%s:%d", val, 4318),
+		"APO_COLLECTOR_SKYWALKING_ENDPOINT": fmt.Sprintf("%s:%d", val, 11800),
 	}
 }

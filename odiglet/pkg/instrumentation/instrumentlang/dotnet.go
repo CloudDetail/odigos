@@ -31,8 +31,8 @@ const (
 
 func DotNet(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
 	collectorUrlValue := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
-	if len(env.Current.OTEL_EXPORTER_OTLP_HTTP_ENDPOINT) > 0 {
-		collectorUrlValue = env.Current.OTEL_EXPORTER_OTLP_HTTP_ENDPOINT
+	if len(env.Current.APO_COLLECTOR_HTTP_ENDPOINT) > 0 {
+		collectorUrlValue = env.Current.APO_COLLECTOR_HTTP_ENDPOINT
 	}
 
 	return &v1beta1.ContainerAllocateResponse{
