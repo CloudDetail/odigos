@@ -17,6 +17,7 @@ type CustomAgentConfig struct {
 	SW_LOGGING_LEVEL                    string
 	SW_LOGGING_MAX_HISTORY_FILES        string
 	SW_LOGGING_MAX_FILE_SIZE            string
+	SW_METER_ACTIVE                     string
 }
 
 func DefaultCustomConfig() CustomAgentConfig {
@@ -27,10 +28,10 @@ func DefaultCustomConfig() CustomAgentConfig {
 
 func LoadCustomAgentConfig() CustomAgentConfig {
 	cfg := DefaultCustomConfig()
-	return SetCustomConfigByEnv(cfg)
+	return SetCustomConfigByEnv(&cfg)
 }
 
-func SetCustomConfigByEnv(obj CustomAgentConfig) CustomAgentConfig {
+func SetCustomConfigByEnv(obj *CustomAgentConfig) CustomAgentConfig {
 	val := reflect.ValueOf(obj).Elem()
 	typ := val.Type()
 
@@ -48,5 +49,5 @@ func SetCustomConfigByEnv(obj CustomAgentConfig) CustomAgentConfig {
 			// do nothing
 		}
 	}
-	return obj
+	return *obj
 }

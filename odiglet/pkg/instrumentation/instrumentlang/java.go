@@ -28,6 +28,7 @@ const (
 	swLOGGING_FILE_NAME             = "SW_LOGGING_FILE_NAME"
 	swLOGGING_MAX_FILE_SIZE         = "SW_LOGGING_MAX_FILE_SIZE"
 	swLOGGING_MAX_HISTORY_FILES     = "SW_LOGGING_MAX_HISTORY_FILES"
+	swMeterActiveEnvVar             = "SW_METER_ACTIVE"
 )
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
@@ -98,6 +99,10 @@ func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.Obser
 		}
 	} else {
 		envs[swLOGGING_OUTPUT] = "CONSOLE"
+	}
+
+	if len(env.Current.SW_METER_ACTIVE) > 0 {
+		envs[swMeterActiveEnvVar] = env.Current.SW_METER_ACTIVE
 	}
 
 	return &v1beta1.ContainerAllocateResponse{
