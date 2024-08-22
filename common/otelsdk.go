@@ -13,6 +13,8 @@ const (
 	EbpfOtelSdkType OtelSdkType = "ebpf"
 
 	SWSdkType OtelSdkType = "skywalking"
+
+	CustomSdkType OtelSdkType = "custom"
 )
 
 type OtelSdkTier string
@@ -33,5 +35,6 @@ var (
 	OtelSdkNativeEnterprise = OtelSdk{SdkType: NativeOtelSdkType, SdkTier: EnterpriseOtelSdkTier}
 	OtelSdkEbpfEnterprise   = OtelSdk{SdkType: EbpfOtelSdkType, SdkTier: EnterpriseOtelSdkTier}
 
-	SWSdkNativeCommunity = OtelSdk{SdkType: SWSdkType, SdkTier: CommunityOtelSdkTier}
+	SWSdkCommunity     = OtelSdk{SdkType: SWSdkType, SdkTier: CommunityOtelSdkTier}
+	CustomSdkCommunity = OtelSdk{SdkType: NativeOtelSdkType, SdkTier: CommunityOtelSdkTier}
 )

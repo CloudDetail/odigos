@@ -2,11 +2,14 @@ package instrumentlang
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/odigos-io/odigos/common"
 	"github.com/odigos-io/odigos/common/envOverwrite"
 	"github.com/odigos-io/odigos/odiglet/pkg/env"
 	"github.com/odigos-io/odigos/odiglet/pkg/instrumentation/consts"
+	"gopkg.in/ini.v1"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
@@ -32,7 +35,6 @@ const (
 )
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
-
 	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.OtelSdkNativeCommunity)
 	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.OtelSdkNativeCommunity)
 
@@ -69,8 +71,8 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 }
 
 func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
-	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.SWSdkNativeCommunity)
-	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.SWSdkNativeCommunity)
+	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.SWSdkCommunity)
+	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.SWSdkCommunity)
 
 	var envs = map[string]string{
 		javaToolOptionsEnvVar: javaToolOptionsVal,
@@ -114,5 +116,70 @@ func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.Obser
 				ReadOnly:      true,
 			},
 		},
+	}
+}
+
+func JavaInCustomAgent(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
+	envs, err := customEnvs("/var/odigos/custom/libapoinstrument.conf")
+	if err != nil {
+		envs = make(map[string]string)
+	}
+	return &v1beta1.ContainerAllocateResponse{
+		Envs: envs,
+		Mounts: []*v1beta1.Mount{
+			{
+				ContainerPath: "/etc/apo/custom",
+				HostPath:      "/var/odigos/custom",
+				ReadOnly:      true,
+			},
+		},
+	}
+}
+
+func customEnvs(path string) (map[string]string, error) {
+	cfg, err := ini.Load(path)
+	if err != nil {
+		return nil, err
+	}
+
+	defaultEnv := GetDefaultInternalValue()
+
+	var envs = make(map[string]string)
+	section, err := cfg.GetSection("java")
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range section.Keys() {
+		rawValue := strings.TrimSpace(key.Value())
+		if strings.HasPrefix(rawValue, "{{") && strings.HasSuffix(rawValue, "}}") {
+			val := strings.TrimPrefix(rawValue, "{{")
+			val = strings.TrimSuffix(val, "}}")
+
+			envVal, find := os.LookupEnv(strings.TrimSpace(val))
+			if find {
+				envs[key.Name()] = envVal
+			} else if v, find := defaultEnv[strings.TrimSpace(val)]; find {
+				envs[key.Name()] = v
+			} else {
+				envs[key.Name()] = key.Value()
+			}
+		} else {
+			envs[key.Name()] = key.Value()
+		}
+	}
+
+	return envs, nil
+}
+
+func GetDefaultInternalValue() map[string]string {
+	val, find := os.LookupEnv("NODE_IP")
+	if !find {
+		val = "localhost"
+	}
+
+	return map[string]string{
+		"OTEL_EXPORTER_GRPC_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4317),
+		"OTEL_EXPORTER_HTTP_ENDPOINT":      fmt.Sprintf("http://%s:%d", val, 4318),
+		"OTEL_EXPORTER_SKYWALING_ENDPOINT": fmt.Sprintf("http://%s:%d", val, 11800),
 	}
 }

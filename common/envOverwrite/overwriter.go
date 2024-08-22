@@ -41,7 +41,7 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
 
-			common.SWSdkNativeCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
+			common.SWSdkCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
 		},
 	},
 	"JAVA_TOOL_OPTIONS": {
@@ -51,7 +51,7 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkEbpfEnterprise:  "-javaagent:/var/odigos/java-ebpf/dtrace-injector.jar",
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
-			common.SWSdkNativeCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
+			common.SWSdkCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
 		},
 	},
 }
