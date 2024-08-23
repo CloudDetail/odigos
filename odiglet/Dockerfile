@@ -1,9 +1,13 @@
 FROM apache/skywalking-java-agent:9.3.0-alpine as sw_agent
 
-FROM rust:slim-bullseye as preload
+FROM registry.cn-hangzhou.aliyuncs.com/kindlingx/centos:7 as preload
 # setup proxy for cn
 ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
 ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+ENV RUSTUP_IO_THREADS 1
+
+# Install Rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y
 COPY preload/.apo-config/cargo-proxy.toml /usr/local/cargo/config.toml
 
 COPY preload /src/preload
