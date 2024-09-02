@@ -48,6 +48,7 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
+	podlog.Info("received mutating pod request", "namespace", req.Namespace, "name", req.Name)
 
 	// TODO 检查能否获取到可用的Odiglet示例; 如果Odiglet全部未就绪,则拒绝应用patch
 	ownerReferences := pod.GetOwnerReferences()
@@ -56,9 +57,10 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	}
 
 	ownerRef := ownerReferences[0]
+	podlog.Info("mutating podInfo", "workload", ownerRef.Name)
 	ownerName := ownerRef.Name
 	ownerKind := ownerRef.Kind
-	namespace := pod.Namespace
+	namespace := req.Namespace
 
 	if ownerKind == "ReplicaSet" {
 		// Or try to get ReplicaSet Owner
@@ -72,11 +74,13 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 
 	ownerObj, err := getOwnerObjFromKind(ownerKind)
 	if err != nil {
+		podlog.Info("owner references kind is not supported yet", "owner", ownerKind)
 		return admission.Allowed("owner references kind is not supported yet: " + ownerKind)
 	}
 
 	err = a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: ownerName}, ownerObj)
 	if err != nil {
+		podlog.Info("cannot find owner", "namespace", namespace, "workloadKind", ownerKind, "workload", ownerName, "err", err)
 		return admission.Allowed(fmt.Sprintf("can not find owner: %s/%s ", ownerKind, ownerName))
 	}
 
@@ -103,17 +107,21 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 
 		mark, find := namespaceObj.GetAnnotations()["odigos-instrumentation"]
 		if !find || mark != "enabled" {
+			podlog.Info(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
 			return admission.Allowed(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
 		} else if mark == "disabled" {
+			podlog.Info(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
 			return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
 		}
 	} else if mark == "disabled" {
-		return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s, workload: %s", namespace, ownerName))
+		podlog.Info("instrument has been disabled for workload", "workloadKind", ownerKind, "workload", ownerName)
+		return admission.Allowed(fmt.Sprintf("instrument has been disabled for workload: %s, workload: %s", ownerKind, ownerName))
 	}
 
 	patchBytes, err := base64.StdEncoding.DecodeString(patchB64)
 	if err != nil {
 		msg := fmt.Sprintf("can not base64 decode originx-instrument-patch for %s/%s, err: %s", ownerKind, ownerName, err)
+		podlog.Info(msg)
 		return admission.Allowed(msg)
 	}
 
@@ -121,10 +129,11 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	err = json.Unmarshal(patchBytes, &patches)
 	if err != nil {
 		msg := fmt.Sprintf("can not json unmarshal originx-instrument-patch for %s/%s, err: %s", ownerKind, ownerName, err)
+		podlog.Info(msg)
 		return admission.Allowed(msg)
 	}
 
-	podlog.Info("instrument pod from odigos patch", "name", ownerName, "namespace", pod.Namespace)
+	podlog.Info("instrument pod from odigos patch", "name", ownerName, "namespace", namespace)
 	return admission.Patched("instrument patch", patches...)
 }
 
