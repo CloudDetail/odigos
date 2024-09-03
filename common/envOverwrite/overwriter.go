@@ -56,11 +56,61 @@ var EnvValuesMap = map[string]envValues{
 	},
 }
 
-// returns the current value that should be populated in a specific environment variable.
-// if we should not patch the value, returns nil.
-// the are 2 parts to the environment value: odigos part and user part.
-// either one can be set or empty.
-// so we have 4 cases to handle:
+func GetPatchedEnvValueAndIgnoreObservedValue(envName string, observedValue string, currentSdk common.OtelSdk) *string {
+	envMetadata, ok := EnvValuesMap[envName]
+	if !ok {
+		// Odigos does not manipulate this environment variable, so ignore it
+		return nil
+	}
+
+	desiredOdigosPart, ok := envMetadata.values[currentSdk]
+	if !ok {
+		// No specific overwrite is required for this SDK
+		return nil
+	}
+
+	// scenario 1: no user defined values and no odigos value
+	// happens: might be the case right after the source is instrumented, and before the instrumentation is applied.
+	// action: there are no user defined values, so no need to make any changes.
+	if observedValue == "" {
+		return nil
+	}
+
+	// scenario 2: no user defined values, only odigos value
+	// happens: when the user did not set any value to this env (either via manifest or dockerfile)
+	// action: we don't need to overwrite the value, just let odigos handle it
+	for _, sdkEnvValue := range envMetadata.values {
+		if sdkEnvValue == observedValue {
+			return nil
+		}
+	}
+
+	// Scenario 3: both odigos and user defined values are present
+	// happens: when the user set some values to this env (either via manifest or dockerfile) and odigos instrumentation is applied.
+	// action: we want to keep the user defined values and upsert the odigos value.
+	for _, sdkEnvValue := range envMetadata.values {
+		if strings.Contains(observedValue, sdkEnvValue) {
+			if sdkEnvValue == desiredOdigosPart {
+				// shortcut, the value is already patched
+				// both the odigos part equals to the new value, and the user part we want to keep
+				return &observedValue
+			} else {
+				// The environment variable is patched by some other odigos sdk.
+				// replace just the odigos part with the new desired value.
+				// this can happen when moving between SDKs.
+				patchedEvnValue := strings.ReplaceAll(observedValue, sdkEnvValue, desiredOdigosPart)
+				return &patchedEvnValue
+			}
+		}
+	}
+
+	// Scenario 4: only user defined values are present
+	// happens: when the user set some values to this env (either via manifest or dockerfile) and odigos instrumentation not yet applied.
+	// action: we want to keep the user defined values and append the odigos value.
+	mergedEnvValue := desiredOdigosPart
+	return &mergedEnvValue
+}
+
 func GetPatchedEnvValue(envName string, observedValue string, currentSdk common.OtelSdk) *string {
 	envMetadata, ok := EnvValuesMap[envName]
 	if !ok {

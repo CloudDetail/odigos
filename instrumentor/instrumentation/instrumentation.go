@@ -16,6 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+var OverwriteUserDefinedEnvs bool = false
+
 var (
 	ErrNoDefaultSDK = errors.New("no default sdks found")
 	ErrPatchEnvVars = errors.New("failed to patch env vars")
@@ -158,7 +160,12 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		// extract the observed value for this env var, which might be empty if not currently exists
 		observedEnvValue := observedEnvs[envVar.Name]
 
-		desiredEnvValue := envOverwrite.GetPatchedEnvValue(envVar.Name, observedEnvValue, sdk)
+		var desiredEnvValue *string
+		if OverwriteUserDefinedEnvs {
+			desiredEnvValue = envOverwrite.GetPatchedEnvValueAndIgnoreObservedValue(envVar.Name, observedEnvValue, sdk)
+		} else {
+			desiredEnvValue = envOverwrite.GetPatchedEnvValue(envVar.Name, observedEnvValue, sdk)
+		}
 
 		if desiredEnvValue == nil {
 			// no need to patch this env var, so make sure it is reverted to its original value
