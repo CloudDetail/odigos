@@ -41,8 +41,8 @@ func Python(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/python",
-				HostPath:      "/var/odigos/python",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},

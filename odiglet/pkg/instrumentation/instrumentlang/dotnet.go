@@ -51,8 +51,8 @@ func DotNet(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/dotnet",
-				HostPath:      "/var/odigos/dotnet",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},

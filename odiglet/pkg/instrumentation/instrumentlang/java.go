@@ -62,8 +62,8 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/java",
-				HostPath:      "/var/odigos/java",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},
@@ -111,8 +111,8 @@ func JavaInSkywalking(deviceId string, uniqueDestinationSignals map[common.Obser
 		Envs: envs,
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/skywalking",
-				HostPath:      "/var/odigos/skywalking",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},
@@ -128,8 +128,8 @@ func JavaInCustomAgent(deviceId string, uniqueDestinationSignals map[common.Obse
 		Envs: envs,
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/etc/apo/instrumentations/custom",
-				HostPath:      "/var/odigos/custom",
+				ContainerPath: "/etc/apo/instrumentations/",
+				HostPath:      "/var/odigos/",
 				ReadOnly:      true,
 			},
 		},

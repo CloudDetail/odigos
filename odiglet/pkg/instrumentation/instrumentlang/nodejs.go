@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	nodeMountPath         = "/var/odigos/nodejs"
 	nodeEnvEndpoint       = "OTEL_EXPORTER_OTLP_ENDPOINT"
 	nodeEnvServiceName    = "OTEL_SERVICE_NAME"
 	nodeEnvNodeOptions    = "NODE_OPTIONS"
@@ -40,8 +39,8 @@ func NodeJS(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: nodeMountPath,
-				HostPath:      nodeMountPath,
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},
