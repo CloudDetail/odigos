@@ -1,18 +1,24 @@
 FROM apache/skywalking-java-agent:9.3.0-alpine as sw_agent
 
 FROM registry.cn-hangzhou.aliyuncs.com/kindlingx/centos:7 as preload
-# setup proxy for cn
-ENV RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
-ENV RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
-
-# Install Rustup
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-
-COPY preload/.apo-config/cargo-proxy.toml /usr/local/cargo/config.toml
 
 COPY preload /src/preload
 WORKDIR /src/preload
+# set up centos-vault mirror
+# COPY CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo
+# Install basic gcc
+RUN yum install -y gcc
 RUN mkdir -p /etc/apo/instrument && gcc -std=c99 -o /etc/apo/instrument/libapolanucher.so -shared launcher/lanucher.c -Wall -Wfatal-errors -fPIC -ldl
+
+# setup proxy for cn
+ENV RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
+ENV RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+ENV PATH $PATH:/root/.cargo/bin
+
+# Install Rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN /root/.cargo/bin/rustup default stable
+COPY preload/.apo-config/cargo-proxy.toml /usr/local/cargo/config.toml
 RUN cd /src/preload/instrument && cargo build --release  && cp target/release/libapoinstrument.so /etc/apo/instrument/.
 COPY preload/.apo-config/* /etc/apo/instrument/.
 RUN chmod -R 755 /etc/apo/instrument/.
