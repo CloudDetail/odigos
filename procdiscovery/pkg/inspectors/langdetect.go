@@ -5,9 +5,7 @@ import (
 
 	"github.com/odigos-io/odigos/common"
 	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/dotnet"
-	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/golang"
 	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/java"
-	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/mysql"
 	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/nodejs"
 	"github.com/odigos-io/odigos/procdiscovery/pkg/inspectors/python"
 	"github.com/odigos-io/odigos/procdiscovery/pkg/process"
@@ -25,13 +23,14 @@ type inspector interface {
 	Inspect(process *process.Details) (common.ProgrammingLanguage, bool)
 }
 
+// stop to inspector golang and mysql
 var inspectorsList = []inspector{
-	&golang.GolangInspector{},
+	// &golang.GolangInspector{},
 	&java.JavaInspector{},
 	&python.PythonInspector{},
-	&dotnet.DotnetInspector{},
 	&nodejs.NodejsInspector{},
-	&mysql.MySQLInspector{},
+	&dotnet.DotnetInspector{},
+	// &mysql.MySQLInspector{},
 }
 
 // DetectLanguage returns the detected language for the process or
