@@ -28,10 +28,15 @@ import (
 	"gomodules.xyz/jsonpatch/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
+
+var DefaultAPONamespace = "apo"
+var EnableOdigletReadyCheck bool = true
 
 // log is for logging in this package.
 var podlog = logf.Log.WithName("patch-pod")
@@ -50,7 +55,7 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	}
 	podlog.Info("received mutating pod request", "namespace", req.Namespace, "name", req.Name)
 
-	// TODO 检查能否获取到可用的Odiglet示例; 如果Odiglet全部未就绪,则拒绝应用patch
+	// 检查对应的工作负载上的标签
 	ownerReferences := pod.GetOwnerReferences()
 	if len(ownerReferences) == 0 {
 		return admission.Allowed("No owner references")
@@ -118,6 +123,14 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 		return admission.Allowed(fmt.Sprintf("instrument has been disabled for workload: %s, workload: %s", ownerKind, ownerName))
 	}
 
+	// 检查能否获取到可用的Odiglet实例;
+	if EnableOdigletReadyCheck {
+		if !isOdigletReady(a.Client) {
+			return admission.Allowed("instrument has been skipped due to odiglet is not ready yet")
+		}
+	}
+
+	// TODO 检查接收端是否就绪
 	patchBytes, err := base64.StdEncoding.DecodeString(patchB64)
 	if err != nil {
 		msg := fmt.Sprintf("can not base64 decode originx-instrument-patch for %s/%s, err: %s", ownerKind, ownerName, err)
@@ -161,4 +174,37 @@ func getAnnotationsAndLabelsFromObj(obj client.Object) (map[string]string, map[s
 	default:
 		return nil, nil
 	}
+}
+
+func isOdigletReady(cli client.Client) bool {
+	selector := labels.SelectorFromSet(labels.Set{
+		"app": "apo-one-agent",
+	})
+	fieldSelector := fields.SelectorFromSet(fields.Set{
+		"status.phase": "Running",
+	})
+
+	listOptions := &client.ListOptions{
+		LabelSelector: selector,
+		FieldSelector: fieldSelector,
+		Namespace:     DefaultAPONamespace,
+		Limit:         5,
+	}
+
+	podList := &corev1.PodList{}
+	err := cli.List(context.Background(), podList, listOptions)
+	if err != nil {
+		podlog.Error(err, "failed to check odiglet status")
+		return false
+	}
+
+	for _, pod := range podList.Items {
+		// 检查odiglet容器是否就绪
+		for _, cStatus := range pod.Status.ContainerStatuses {
+			if cStatus.Name == "apo-odiglet" && cStatus.Ready {
+				return true
+			}
+		}
+	}
+	return false
 }
