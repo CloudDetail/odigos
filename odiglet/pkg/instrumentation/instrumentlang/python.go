@@ -13,7 +13,7 @@ import (
 const (
 	envOtelTracesExporter              = "OTEL_TRACES_EXPORTER"
 	envOtelMetricsExporter             = "OTEL_METRICS_EXPORTER"
-	envValOtelHttpExporter             = "otlp"
+	envOtelLogsExporter                = "OTEL_LOGS_EXPORTER"
 	envLogCorrelation                  = "OTEL_PYTHON_LOG_CORRELATION"
 	envPythonPath                      = "PYTHONPATH"
 	envOtelExporterOTLPTracesProtocol  = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
@@ -22,11 +22,16 @@ const (
 )
 
 func Python(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
+	pythonpathVal, _ := envOverwrite.ValToAppend(envPythonPath, common.OtelSdkNativeCommunity)
+
+	logsExporter := env.Current.OTEL_LOGS_EXPORTER
+	metricsExporter := env.Current.OTEL_METRICS_EXPORTER
+	tracesExporter := env.Current.OTEL_TRACES_EXPORTER
+
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
 	if len(env.Current.APO_COLLECTOR_HTTP_ENDPOINT) > 0 {
 		otlpEndpoint = env.Current.APO_COLLECTOR_HTTP_ENDPOINT
 	}
-	pythonpathVal, _ := envOverwrite.ValToAppend("PYTHONPATH", common.OtelSdkNativeCommunity)
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
@@ -34,8 +39,9 @@ func Python(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 			envPythonPath:                      pythonpathVal,
 			"OTEL_EXPORTER_OTLP_ENDPOINT":      otlpEndpoint,
 			"OTEL_RESOURCE_ATTRIBUTES":         fmt.Sprintf("service.name=%s,odigos.device=python", deviceId),
-			envOtelTracesExporter:              envValOtelHttpExporter,
-			envOtelMetricsExporter:             envValOtelHttpExporter,
+			envOtelTracesExporter:              tracesExporter,
+			envOtelMetricsExporter:             metricsExporter,
+			envOtelLogsExporter:                logsExporter,
 			envOtelExporterOTLPTracesProtocol:  httpProtobufProtocol,
 			envOtelExporterOTLPMetricsProtocol: httpProtobufProtocol,
 		},

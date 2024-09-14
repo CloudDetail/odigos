@@ -38,14 +38,13 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.OtelSdkNativeCommunity)
 	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.OtelSdkNativeCommunity)
 
-	logsExporter := "none"
-	metricsExporter := "none"
-	tracesExporter := "none"
+	logsExporter := env.Current.OTEL_LOGS_EXPORTER
+	metricsExporter := env.Current.OTEL_METRICS_EXPORTER
+	tracesExporter :=  env.Current.OTEL_TRACES_EXPORTER
 
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
 	if len(env.Current.APO_COLLECTOR_GRPC_ENDPOINT) > 0 {
 		otlpEndpoint = env.Current.APO_COLLECTOR_GRPC_ENDPOINT
-		tracesExporter = "otlp"
 	}
 
 	return &v1beta1.ContainerAllocateResponse{
