@@ -4,6 +4,8 @@ import (
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	v1 "github.com/odigos-io/odigos/api/v1"
 	"github.com/odigos-io/odigos/instrumentor/controllers/utils"
+	k8sutils "github.com/odigos-io/odigos/k8sutils/pkg/client"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -65,7 +67,12 @@ func (w workloadEnvChangePredicate) Generic(e event.GenericEvent) bool {
 	return false
 }
 
-func SetupWithManager(mgr ctrl.Manager) error {
+func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
+	// Create a new client with fallback to API server
+	// We are doing this because client-go cache is not supporting dynamic cache rules
+	// Sometimes we will need to get/list objects that are out of the cache (e.g. when namespace is labeled)
+	clientWithFallback := k8sutils.NewKubernetesClientFromCacheWithAPIFallback(mgr.GetClient(), mgr.GetAPIReader())
+
 	err := builder.
 		ControllerManagedBy(mgr).
 		Named("instrumentationdevice-collectorsgroup").
@@ -151,7 +158,7 @@ func SetupWithManager(mgr ctrl.Manager) error {
 	}
 	mgr.GetWebhookServer().Register("/mutate-core-v1-pod", &webhook.Admission{
 		Handler: &v1.PodInstrument{
-			Client:  mgr.GetClient(),
+			Client:  clientWithFallback,
 			Decoder: admission.NewDecoder(mgr.GetScheme()),
 		},
 	})
