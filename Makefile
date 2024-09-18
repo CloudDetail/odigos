@@ -2,8 +2,19 @@ TAG ?= $(shell odigos version --cluster)
 ODIGOS_CLI_VERSION ?= $(shell odigos version --cli)
 ORG := keyval
 
+nodejs-instrumentation:
+	tar -zvxf nodejs-instrumentation.tar.gz
+
+python-instrumentation-originx:
+	tar -zvxf python-instrumentation-originx.tar.gz
+
+tracer-home:
+	tar -zvxf tracer-home.tar.gz
+
+extract-instrumentation-tgz: nodejs-instrumentation python-instrumentation-originx tracer-home
+
 .PHONY: build-odiglet
-build-odiglet:
+build-odiglet: extract-instrumentation-tgz
 	docker build -t $(ORG)/odigos-odiglet:$(TAG) . -f odiglet/Dockerfile --build-arg ODIGOS_VERSION=$(TAG)
 
 .PHONY: verify-nodejs-agent

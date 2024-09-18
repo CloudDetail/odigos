@@ -4,4 +4,12 @@ node_modules
 .DS_Store
 go.work.sum
 cli/odigos
+<<<<<<< HEAD
 .venv
+=======
+
+
+/nodejs-instrumentation/
+/python-instrumentation-originx/
+/tracer-home/
+>>>>>>> 1b314012 (tmp)
