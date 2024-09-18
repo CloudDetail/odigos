@@ -2,6 +2,8 @@ package instrumentationdevice
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
@@ -13,6 +15,7 @@ import (
 	"github.com/odigos-io/odigos/k8sutils/pkg/env"
 	k8sutils "github.com/odigos-io/odigos/k8sutils/pkg/utils"
 	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
+	"gomodules.xyz/jsonpatch/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,7 +126,21 @@ func addInstrumentationDeviceToWorkload(ctx context.Context, kubeClient client.C
 			return err
 		}
 
-		return instrumentation.ApplyInstrumentationDevicesToPodTemplate(podSpec, runtimeDetails, otelSdkToUse, obj)
+		deepCpObj := obj.DeepCopyObject().(client.Object)
+		err = instrumentation.ApplyInstrumentationDevicesToPodTemplate(podSpec, runtimeDetails, odigosConfig.DefaultSDKs, deepCpObj)
+		if err != nil {
+			return err
+		}
+
+		expectedPodSpec, err := getPodSpecFromObject(deepCpObj)
+		if err != nil {
+			return err
+		}
+		err = appendPatchIntoObj(obj, podSpec, expectedPodSpec)
+		if err != nil {
+			return err
+		}
+		return nil
 	})
 
 	if err != nil {
@@ -154,19 +171,9 @@ func removeInstrumentationDeviceFromWorkload(ctx context.Context, kubeClient cli
 	}
 
 	result, err := controllerutil.CreateOrPatch(ctx, kubeClient, workloadObj, func() error {
-
-		// clear old ebpf instrumentation annotation, just in case it still exists
-		clearInstrumentationEbpf(workloadObj)
-		podSpec, err := getPodSpecFromObject(workloadObj)
-		if err != nil {
-			return err
-		}
-
-		instrumentation.RevertInstrumentationDevices(podSpec)
-		err = instrumentation.RevertEnvOverwrites(workloadObj, podSpec)
-		if err != nil {
-			return err
-		}
+		// 清理originx-instrument-patch
+		annos := workloadObj.GetAnnotations()
+		delete(annos, "originx-instrument-patch")
 		return nil
 	})
 
@@ -266,4 +273,42 @@ func reconcileSingleWorkload(ctx context.Context, kubeClient client.Client, inst
 		conditions.UpdateStatusConditions(ctx, kubeClient, instrumentedApplication, &instrumentedApplication.Status.Conditions, metav1.ConditionFalse, appliedInstrumentationDeviceType, string(ApplyInstrumentationDeviceReasonErrApplying), err.Error())
 	}
 	return err
+}
+
+func appendPatchIntoObj(obj client.Object, rawPodSpec, expectedPodSpec *corev1.PodTemplateSpec) error {
+	rawSpec, err := json.Marshal(rawPodSpec)
+	if err != nil {
+		return err
+	}
+	expectedSpec, err := json.Marshal(expectedPodSpec)
+	if err != nil {
+		return err
+	}
+	patches, err := jsonpatch.CreatePatch(rawSpec, expectedSpec)
+	if err != nil {
+		return err
+	}
+	patchBytes, err := json.Marshal(patches)
+	if err != nil {
+		return err
+	}
+	if len(patchBytes) > 0 {
+		patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
+		if obj.GetAnnotations() == nil {
+			obj.SetAnnotations(map[string]string{
+				"originx-instrument-patch": patchBytesBase64,
+			})
+		} else {
+			obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+		}
+
+		if obj.GetLabels() == nil {
+			obj.SetLabels(map[string]string{
+				consts.OdigosInstrumentationLabel: consts.InstrumentationEnabled,
+			})
+		} else {
+			obj.GetLabels()[consts.OdigosInstrumentationLabel] = consts.InstrumentationEnabled
+		}
+	}
+	return nil
 }
