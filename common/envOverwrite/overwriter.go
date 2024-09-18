@@ -123,6 +123,34 @@ func GetPatchedEnvValue(envName string, observedValue string, currentSdk common.
 	return &mergedEnvValue
 }
 
+func GetPatchedEnvValueIgnoreUserDefined(envName, observedValue string, currentSdk common.OtelSdk, language common.ProgrammingLanguage) *string {
+	// scenario 1: no user defined values and no odigos value
+	// happens: might be the case right after the source is instrumented, and before the instrumentation is applied.
+	// action: there are no user defined values, so no need to make any changes.
+	if observedValue == "" {
+		return nil
+	}
+
+	envMetadata, ok := EnvValuesMap[envName]
+	if !ok {
+		// Odigos does not manipulate this environment variable, so ignore it
+		return nil
+	}
+
+	if envMetadata.programmingLanguage != language {
+		// Odigos does not manipulate this environment variable for the given language, so ignore it
+		return nil
+	}
+
+	desiredOdigosPart, ok := envMetadata.values[currentSdk]
+	if !ok {
+		// No specific overwrite is required for this SDK
+		return nil
+	}
+
+	return &desiredOdigosPart
+}
+
 func ValToAppend(envName string, sdk common.OtelSdk) (string, bool) {
 	env, exists := EnvValuesMap[envName]
 	if !exists {

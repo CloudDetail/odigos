@@ -11,9 +11,12 @@ import (
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	"github.com/odigos-io/odigos/common"
 	"github.com/odigos-io/odigos/k8sutils/pkg/envoverwrite"
+	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
+
+var OverwriteUserDefinedEnvs bool = false
 
 var (
 	ErrNoDefaultSDK = errors.New("no default sdks found")
@@ -156,7 +159,12 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		// extract the observed value for this env var, which might be empty if not currently exists
 		observedEnvValue := observedEnvs[envVar.Name]
 
-		desiredEnvValue := envOverwrite.GetPatchedEnvValue(envVar.Name, observedEnvValue, sdk, programmingLanguage)
+		var desiredEnvValue *string
+		if OverwriteUserDefinedEnvs {
+			desiredEnvValue = envOverwrite.GetPatchedEnvValueIgnoreUserDefined(envVar.Name, observedEnvValue, sdk, programmingLanguage)
+		} else {
+			desiredEnvValue = envOverwrite.GetPatchedEnvValue(envVar.Name, observedEnvValue, sdk, programmingLanguage)
+		}
 
 		if desiredEnvValue == nil {
 			// no need to patch this env var, so make sure it is reverted to its original value
@@ -220,7 +228,7 @@ func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, c
 	if !find {
 		return nil, false
 	}
-	name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
+	name, _, err := workload.ExtractWorkloadInfoFromRuntimeObjectName(runtimeDetails.Name)
 	if err != nil {
 		return nil, false
 	}

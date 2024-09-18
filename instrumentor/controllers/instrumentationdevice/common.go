@@ -48,6 +48,10 @@ func clearInstrumentationEbpf(obj client.Object) {
 }
 
 func isDataCollectionReady(ctx context.Context, c client.Client) bool {
+	if CurrentInstrumentorConfig.ENABLE_CUSTOM_COLLECTOR {
+		// TODO check custom collector is ready
+		return true
+	}
 	logger := log.FromContext(ctx)
 	var collectorGroups odigosv1.CollectorsGroupList
 	err := c.List(ctx, &collectorGroups, client.InNamespace(env.GetCurrentNamespace()))
