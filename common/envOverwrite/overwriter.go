@@ -173,6 +173,9 @@ func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
 		return []string{"OTEL_SERVICE_NAME"}, true
 	case common.SWSdkType:
 		return []string{"SW_AGENT_NAME"}, true
+	case common.CustomSdkType:
+		// HACK 不知道会用哪种SDK,添加所有已知π的ServiceName
+		return []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME"}, true
 	default:
 		return nil, false
 	}
