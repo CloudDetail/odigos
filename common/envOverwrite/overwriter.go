@@ -136,3 +136,12 @@ func ValToAppend(envName string, sdk common.OtelSdk) (string, bool) {
 
 	return valToAppend, true
 }
+
+func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
+	switch sdk.SdkType {
+	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
+		return []string{"OTEL_SERVICE_NAME"}, true
+	default:
+		return nil, false
+	}
+}

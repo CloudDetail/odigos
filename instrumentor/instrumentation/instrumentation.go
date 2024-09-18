@@ -203,8 +203,45 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		}
 	}
 
-	// Step 3: update the container with the new env vars
+	// Step 3: auto discovery service name
+	svcNameEnv, ok := autoDiscoverServiceName(runtimeDetails, container, observedEnvs, sdk)
+	if ok {
+		newEnvs = append(newEnvs, svcNameEnv...)
+	}
+
+	// Step 4: update the container with the new env vars
 	container.Env = newEnvs
 
 	return nil
+}
+
+func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, observedEnvs map[string]string, sdk common.OtelSdk) ([]corev1.EnvVar, bool) {
+	serviceEnvName, find := envOverwrite.ServiceNameEnv(sdk)
+	if !find {
+		return nil, false
+	}
+	name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
+	if err != nil {
+		return nil, false
+	}
+	var res = make([]corev1.EnvVar, 0)
+	for _, svcName := range serviceEnvName {
+		// 用户手动设置了ServiceName
+		if _, find := observedEnvs[svcName]; find {
+			continue
+		}
+
+		if name != container.Name {
+			res = append(res, corev1.EnvVar{
+				Name:  svcName,
+				Value: fmt.Sprintf("%s-%s", name, container.Name),
+			})
+		} else {
+			res = append(res, corev1.EnvVar{
+				Name:  svcName,
+				Value: container.Name,
+			})
+		}
+	}
+	return res, true
 }
