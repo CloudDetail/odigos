@@ -29,7 +29,7 @@ var _ goAutoConfig.Provider = (*ConfigProvider[goAutoConfig.InstrumentationConfi
 // compile-time check that GoOtelEbpfSdk implements ConfigurableOtelEbpfSdk
 var _ ConfigurableOtelEbpfSdk = (*GoOtelEbpfSdk)(nil)
 
-type GoInstrumentationFactory struct{
+type GoInstrumentationFactory struct {
 	kubeclient client.Client
 }
 
@@ -40,10 +40,14 @@ func NewGoInstrumentationFactory(kubeclient client.Client) InstrumentationFactor
 }
 
 func (g *GoInstrumentationFactory) CreateEbpfInstrumentation(ctx context.Context, pid int, serviceName string, podWorkload *workload.PodWorkload, containerName string, podName string, loadedIndicator chan struct{}) (*GoOtelEbpfSdk, error) {
+	otlpendpoint := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OTLPPort)
+	if len(env.Current.APO_COLLECTOR_GRPC_ENDPOINT) > 0 {
+		otlpendpoint = env.Current.APO_COLLECTOR_GRPC_ENDPOINT
+	}
 	defaultExporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OTLPPort)),
+		otlptracegrpc.WithEndpoint(otlpendpoint),
 	)
 	if err != nil {
 		log.Logger.Error(err, "failed to create exporter")

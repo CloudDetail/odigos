@@ -25,23 +25,16 @@ const (
 
 func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
+	if len(env.Current.APO_COLLECTOR_GRPC_ENDPOINT) > 0 {
+		otlpEndpoint = env.Current.APO_COLLECTOR_GRPC_ENDPOINT
+	}
+
 	javaOptsVal, _ := envOverwrite.ValToAppend(javaOptsEnvVar, common.OtelSdkNativeCommunity)
 	javaToolOptionsVal, _ := envOverwrite.ValToAppend(javaToolOptionsEnvVar, common.OtelSdkNativeCommunity)
 
-	logsExporter := "none"
-	metricsExporter := "none"
-	tracesExporter := "none"
-
-	// Set the values based on the signals exists in the map
-	if _, ok := uniqueDestinationSignals[common.LogsObservabilitySignal]; ok {
-		logsExporter = "otlp"
-	}
-	if _, ok := uniqueDestinationSignals[common.MetricsObservabilitySignal]; ok {
-		metricsExporter = "otlp"
-	}
-	if _, ok := uniqueDestinationSignals[common.TracesObservabilitySignal]; ok {
-		tracesExporter = "otlp"
-	}
+	logsExporter := env.Current.OTEL_LOGS_EXPORTER
+	metricsExporter := env.Current.OTEL_METRICS_EXPORTER
+	tracesExporter := env.Current.OTEL_TRACES_EXPORTER
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
@@ -57,8 +50,8 @@ func Java(deviceId string, uniqueDestinationSignals map[common.ObservabilitySign
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/java",
-				HostPath:      "/var/odigos/java",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},

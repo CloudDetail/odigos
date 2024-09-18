@@ -25,39 +25,30 @@ const (
 
 func Python(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
 	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
+	if len(env.Current.APO_COLLECTOR_HTTP_ENDPOINT) > 0 {
+		otlpEndpoint = env.Current.APO_COLLECTOR_HTTP_ENDPOINT
+	}
 	pythonpathVal, _ := envOverwrite.ValToAppend(envPythonPath, common.OtelSdkNativeCommunity)
-	opampServerHost := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OpAMPPort)
 
-	logsExporter := "none"
-	metricsExporter := "none"
-	tracesExporter := "none"
-
-	if _, ok := uniqueDestinationSignals[common.MetricsObservabilitySignal]; ok {
-		metricsExporter = "otlp"
-	}
-	if _, ok := uniqueDestinationSignals[common.TracesObservabilitySignal]; ok {
-		tracesExporter = "otlp"
-	}
+	logsExporter := env.Current.OTEL_LOGS_EXPORTER
+	metricsExporter := env.Current.OTEL_METRICS_EXPORTER
+	tracesExporter := env.Current.OTEL_TRACES_EXPORTER
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
-			pythonOdigosDeviceId:          deviceId,
-			pythonOdigosOpampServer:       opampServerHost,
-			envLogCorrelation:             "true",
-			envPythonPath:                 pythonpathVal,
-			"OTEL_EXPORTER_OTLP_ENDPOINT": otlpEndpoint,
-			envOtelTracesExporter:         tracesExporter,
-			envOtelMetricsExporter:        metricsExporter,
-			// Log exporter is currently set to "none" due to the data collection method, which collects logs from the file system.
-			// In the future, this will be changed to "otlp" to send logs directly from the agent to the gateway.
+			envLogCorrelation:                  "true",
+			envPythonPath:                      pythonpathVal,
+			"OTEL_EXPORTER_OTLP_ENDPOINT":      otlpEndpoint,
+			envOtelTracesExporter:              tracesExporter,
+			envOtelMetricsExporter:             metricsExporter,
 			envOtelLogsExporter:                logsExporter,
 			envOtelExporterOTLPTracesProtocol:  httpProtobufProtocol,
 			envOtelExporterOTLPMetricsProtocol: httpProtobufProtocol,
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/python",
-				HostPath:      "/var/odigos/python",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},

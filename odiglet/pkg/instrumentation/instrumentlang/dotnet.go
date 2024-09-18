@@ -31,13 +31,18 @@ const (
 )
 
 func DotNet(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
+	collectorUrlValue := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
+	if len(env.Current.APO_COLLECTOR_HTTP_ENDPOINT) > 0 {
+		collectorUrlValue = env.Current.APO_COLLECTOR_HTTP_ENDPOINT
+	}
+
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
 			enableProfilingEnvVar: "1",
 			profilerEndVar:        profilerId,
 			profilerPathEnv:       fmt.Sprintf(profilerPath, getArch()), // TODO(edenfed): Support both musl and glibc. Requires improved language detection
 			tracerHomeEnv:         tracerHome,
-			collectorUrlEnv:       fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort),
+			collectorUrlEnv:       collectorUrlValue,
 			serviceNameEnv:        deviceId,
 			exportTypeEnv:         "otlp",
 			resourceAttrEnv:       "odigos.device=dotnet",
@@ -47,8 +52,8 @@ func DotNet(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 		},
 		Mounts: []*v1beta1.Mount{
 			{
-				ContainerPath: "/var/odigos/dotnet",
-				HostPath:      "/var/odigos/dotnet",
+				ContainerPath: commonMountPath,
+				HostPath:      commonMountPath,
 				ReadOnly:      true,
 			},
 		},
