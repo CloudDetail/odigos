@@ -117,6 +117,7 @@ func startDeviceManager(clientset *kubernetes.Clientset) {
 		},
 		common.JavaProgrammingLanguage: {
 			common.OtelSdkNativeCommunity: instrumentlang.Java,
+			common.SWSdkCommunity:         instrumentlang.JavaInSkywalking,
 		},
 		common.PythonProgrammingLanguage: {
 			common.OtelSdkNativeCommunity: instrumentlang.Python,

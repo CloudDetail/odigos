@@ -44,6 +44,7 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkEbpfEnterprise:  "-javaagent:/var/odigos/java-ebpf/dtrace-injector.jar",
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
+			common.SWSdkCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
 		},
 	},
 	"JAVA_TOOL_OPTIONS": {
@@ -54,6 +55,7 @@ var EnvValuesMap = map[string]envValues{
 			common.OtelSdkEbpfEnterprise:  "-javaagent:/var/odigos/java-ebpf/dtrace-injector.jar",
 			common.OtelSdkNativeEnterprise: "-javaagent:/var/odigos/java-ext-ebpf/javaagent.jar " +
 				"-Dotel.javaagent.extensions=/var/odigos/java-ext-ebpf/otel_agent_extension.jar",
+			common.SWSdkCommunity: "-javaagent:/var/odigos/skywalking/java/skywalking-agent.jar",
 		},
 	},
 }
@@ -169,6 +171,8 @@ func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
 	switch sdk.SdkType {
 	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
 		return []string{"OTEL_SERVICE_NAME"}, true
+	case common.SWSdkType:
+		return []string{"SW_AGENT_NAME"}, true
 	default:
 		return nil, false
 	}
