@@ -114,7 +114,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 		ControllerManagedBy(mgr).
 		Named("instrumentationdevice-deployment").
 		For(&appsv1.Deployment{}).
-		WithEventFilter(workloadEnvChangePredicate{}).
+		WithEventFilter(&instrumentStatusChangePredicate{cfg: cfg}).
 		Complete(&DeploymentReconciler{
 			Client: mgr.GetClient(),
 		})
@@ -126,7 +126,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 		ControllerManagedBy(mgr).
 		Named("instrumentationdevice-daemonset").
 		For(&appsv1.DaemonSet{}).
-		WithEventFilter(workloadEnvChangePredicate{}).
+		WithEventFilter(&instrumentStatusChangePredicate{cfg: cfg}).
 		Complete(&DaemonSetReconciler{
 			Client: mgr.GetClient(),
 		})
@@ -137,7 +137,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 	err = builder.
 		ControllerManagedBy(mgr).
 		For(&appsv1.StatefulSet{}).
-		WithEventFilter(workloadEnvChangePredicate{}).
+		WithEventFilter(&instrumentStatusChangePredicate{cfg: cfg}).
 		Complete(&StatefulSetReconciler{
 			Client: mgr.GetClient(),
 		})
