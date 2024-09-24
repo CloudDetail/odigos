@@ -39,7 +39,6 @@ import (
 
 	"github.com/odigos-io/odigos/instrumentor/controllers/deleteinstrumentedapplication"
 	"github.com/odigos-io/odigos/instrumentor/controllers/instrumentationdevice"
-	"github.com/odigos-io/odigos/instrumentor/report"
 	"github.com/odigos-io/odigos/instrumentor/setup"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -154,10 +153,6 @@ func main() {
 	}
 
 	go common.StartPprofServer(setupLog)
-
-	if !telemetryDisabled {
-		go report.Start(mgr.GetClient())
-	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
