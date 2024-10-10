@@ -26,7 +26,10 @@ type CustomAgentConfig struct {
 
 func DefaultCustomConfig() CustomAgentConfig {
 	return CustomAgentConfig{
-		SW_LOGGING_DIR: "/opt/skywalking/logs",
+		SW_LOGGING_DIR:        "/opt/skywalking/logs",
+		OTEL_TRACES_EXPORTER:  "otlp",
+		OTEL_METRICS_EXPORTER: "none",
+		OTEL_LOGS_EXPORTER:    "none",
 	}
 }
 
