@@ -11,18 +11,26 @@ import (
 )
 
 const (
-	nodeEnvEndpoint       = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	nodeEnvServiceName    = "OTEL_SERVICE_NAME"
-	nodeEnvNodeOptions    = "NODE_OPTIONS"
-	nodeOdigosOpampServer = "ODIGOS_OPAMP_SERVER_HOST"
-	nodeOdigosDeviceId    = "ODIGOS_INSTRUMENTATION_DEVICE_ID"
+	nodeEnvEndpoint               = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	nodeEnvServiceName            = "OTEL_SERVICE_NAME"
+	nodeEnvNodeOptions            = "NODE_OPTIONS"
+	nodeOdigosOpampServer         = "ODIGOS_OPAMP_SERVER_HOST"
+	nodeOdigosDeviceId            = "ODIGOS_INSTRUMENTATION_DEVICE_ID"
+	nodeOtelLogsExporterEnvVar    = "OTEL_LOGS_EXPORTER"
+	nodeOtelMetricsExporterEnvVar = "OTEL_METRICS_EXPORTER"
+	nodeOtelTracesExporterEnvVar  = "OTEL_TRACES_EXPORTER"
 )
 
 func NodeJS(deviceId string, uniqueDestinationSignals map[common.ObservabilitySignal]struct{}) *v1beta1.ContainerAllocateResponse {
-	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPPort)
+	otlpEndpoint := fmt.Sprintf("http://%s:%d", env.Current.NodeIP, consts.OTLPHttpPort)
 	if len(env.Current.APO_COLLECTOR_GRPC_ENDPOINT) > 0 {
 		otlpEndpoint = env.Current.APO_COLLECTOR_GRPC_ENDPOINT
 	}
+
+	logsExporter := env.Current.OTEL_LOGS_EXPORTER
+	metricsExporter := env.Current.OTEL_METRICS_EXPORTER
+	tracesExporter := env.Current.OTEL_TRACES_EXPORTER
+
 	nodeOptionsVal, _ := envOverwrite.ValToAppend(nodeEnvNodeOptions, common.OtelSdkNativeCommunity)
 	opampServerHost := fmt.Sprintf("%s:%d", env.Current.NodeIP, consts.OpAMPPort)
 	if len(env.Current.OTEL_EXPORTER_OPAMP_ENDPOINT) > 0 {
@@ -31,11 +39,14 @@ func NodeJS(deviceId string, uniqueDestinationSignals map[common.ObservabilitySi
 
 	return &v1beta1.ContainerAllocateResponse{
 		Envs: map[string]string{
-			nodeEnvEndpoint:       otlpEndpoint,
-			nodeEnvServiceName:    deviceId, // temporary set the device id as well, so if opamp fails we can fallback to resolve k8s attributes in the collector
-			nodeEnvNodeOptions:    nodeOptionsVal,
-			nodeOdigosOpampServer: opampServerHost,
-			nodeOdigosDeviceId:    deviceId,
+			nodeEnvEndpoint:               otlpEndpoint,
+			nodeEnvServiceName:            deviceId, // temporary set the device id as well, so if opamp fails we can fallback to resolve k8s attributes in the collector
+			nodeEnvNodeOptions:            nodeOptionsVal,
+			nodeOdigosOpampServer:         opampServerHost,
+			nodeOdigosDeviceId:            deviceId,
+			nodeOtelTracesExporterEnvVar:  tracesExporter,
+			nodeOtelMetricsExporterEnvVar: metricsExporter,
+			nodeOtelLogsExporterEnvVar:    logsExporter,
 		},
 		Mounts: []*v1beta1.Mount{
 			{

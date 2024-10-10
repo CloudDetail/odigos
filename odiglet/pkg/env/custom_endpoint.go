@@ -10,6 +10,10 @@ type CustomAgentConfig struct {
 	APO_COLLECTOR_HTTP_ENDPOINT  string
 	OTEL_EXPORTER_OPAMP_ENDPOINT string
 
+	OTEL_TRACES_EXPORTER  string
+	OTEL_METRICS_EXPORTER string
+	OTEL_LOGS_EXPORTER    string
+
 	APO_COLLECTOR_SKYWALKING_ENDPOINT string
 	SW_LOGGING_OUTPUT                 string
 	SW_LOGGING_DIR                    string
