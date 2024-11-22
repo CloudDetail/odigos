@@ -1,4 +1,5 @@
 FROM apache/skywalking-java-agent:9.3.0-alpine as sw_agent
+FROM registry.cn-hangzhou.aliyuncs.com/kindlingx/autoinstrumentation-python:0.48b0 as python_agent
 
 FROM registry.cn-hangzhou.aliyuncs.com/kindlingx/centos:7 as preload
 
@@ -49,7 +50,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 WORKDIR /instrumentations
 
 # Java
-ARG JAVA_OTEL_VERSION=v2.7.0
+ARG JAVA_OTEL_VERSION=v2.8.0
 ADD ./opentelemetry-javaagent.jar /instrumentations/java/javaagent.jar
 RUN chmod 644 /instrumentations/java/javaagent.jar
 
@@ -57,7 +58,8 @@ RUN chmod 644 /instrumentations/java/javaagent.jar
 COPY --from=sw_agent /skywalking/agent /instrumentations/skywalking/java
 
 # Python
-COPY ./python-instrumentation-originx/workspace/ /instrumentations/python
+ARG PYTHON_OTEL_VERSION=0.48b0
+COPY --from=python_agent /autoinstrumentation /instrumentations/python
 
 # NodeJS
 COPY  nodejs-instrumentation/workspace/node_modules/ /instrumentations/nodejs/node_modules
@@ -65,6 +67,8 @@ COPY  nodejs-instrumentation/src /instrumentations/nodejs
 
 # .NET
 COPY  ./tracer-home /instrumentations/dotnet
+
+RUN chmod -R +x /instrumentations
 
 FROM registry.fedoraproject.org/fedora-minimal:38
 COPY --from=builder /go/src/github.com/odigos-io/odigos/odiglet/odiglet /root/odiglet
