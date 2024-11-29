@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
+	"github.com/odigos-io/odigos/k8sutils/pkg/env"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,7 +35,7 @@ func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Cli
 
 	// TODO deal with error
 	for _, ns := range namespaceList.Items {
-		if ns.Name == "kube-system" {
+		if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
 			// 永远不操作kube-system下面的资源
 			continue
 		}
@@ -97,7 +98,7 @@ func checkIfEnabled(find bool, op any, def bool) bool {
 	case "enabledFuture":
 		// 对Namespace来说,只有enabledFuture才设置instrument为true; 表示后续新增的工作负载全部注入
 		return true
-	case "disable":
+	case "disabled":
 		return false
 	default:
 		// 根据默认设置决定是否开启
