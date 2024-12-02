@@ -70,7 +70,7 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 		isEnabled := checkIfEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := ns.GetLabels()[consts.OdigosInstrumentationLabel]
-			if !find || value == "disabled" {
+			if !find || value == "disabled" || value == "disable" {
 				continue
 			}
 			logger.Info("uninstrument namespace", "name", ns.Name)
@@ -98,7 +98,7 @@ func checkIfEnabled(find bool, op any, def bool) bool {
 	case "enabledFuture":
 		// 对Namespace来说,只有enabledFuture才设置instrument为true; 表示后续新增的工作负载全部注入
 		return true
-	case "disabled":
+	case "disabled", "disable":
 		return false
 	default:
 		// 根据默认设置决定是否开启

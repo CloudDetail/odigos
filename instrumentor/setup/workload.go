@@ -85,7 +85,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 		// 如果设置了全局Enabled,检查当前namespace是否设置了disabled
 		nsCfg := cfg.GetStringMap("namespace")
 		if operation, find := nsCfg[namespace]; find {
-			if operation.(string) == "disabled" {
+			if operation.(string) == "disabled" || operation.(string) == "disable" {
 				defaultEnable = false
 			}
 		}
@@ -93,7 +93,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 		// 如果未设置全局Enabled,检查当前Namespace的配置
 		nsCfg := cfg.GetStringMap("namespace")
 		if operation, find := nsCfg[namespace]; find {
-			if operation.(string) == "enabled" || operation.(string) == "enabledFuture" {
+			if operation.(string) == "enabled" || operation.(string) == "enable" || operation.(string) == "enabledFuture" {
 				defaultEnable = true
 			}
 		}
@@ -109,7 +109,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := statefulset.GetLabels()[consts.OdigosInstrumentationLabel]
-			if find && value == "disabled" {
+			if find && (value == "disabled" || value == "disable") {
 				continue
 			} else if !find && !defaultEnable {
 				continue
@@ -140,7 +140,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := deployment.GetLabels()[consts.OdigosInstrumentationLabel]
-			if !find || value == "disabled" {
+			if !find || (value == "disabled" || value == "disable") {
 				continue
 			}
 			logger.Info("uninstrument deployment", "namespace", deployment.Namespace, "name", deployment.Name)
@@ -165,7 +165,7 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := daemonset.GetLabels()[consts.OdigosInstrumentationLabel]
-			if !find || value == "disabled" {
+			if !find || (value == "disabled" || value == "disable") {
 				continue
 			}
 			logger.Info("uninstrument daemonset", "namespace", daemonset.Namespace, "name", daemonset.Name)
@@ -203,9 +203,9 @@ func checkIsWorkloadEnabled(find bool, op any, def bool) bool {
 		return def
 	}
 	switch operation {
-	case "disabled":
+	case "disabled", "disable":
 		return false
-	case "enabled":
+	case "enabled", "enable":
 		return true
 	default:
 		return def
