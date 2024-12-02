@@ -28,8 +28,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM gcr.io/distroless/static:nonroot
 ARG SERVICE_NAME
 WORKDIR /
-COPY --from=builder /workspace/build/$SERVICE_NAME ./app
+COPY --from=builder /workspace/build/$SERVICE_NAME ./odigos-instrumentor
 USER 65532:65532
 # TODO: calling the binary by SERVICE_NAME should be better for us in debugging
 # but it does not work in distroless image
-ENTRYPOINT ["/app"]
+ENTRYPOINT ["/odigos-instrumentor"]
