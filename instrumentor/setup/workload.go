@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
+	"github.com/odigos-io/odigos/k8sutils/pkg/env"
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,6 +74,11 @@ func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Clie
 }
 
 func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, namespace string, cfg *viper.Viper, defaultEnable bool) error {
+	if namespace == "kube-system" || namespace == env.GetCurrentNamespace() {
+		// 永远不操作kube-system下面的资源
+		return nil
+	}
+
 	workloadCfg := cfg.GetStringMap("workload")
 	var namespacedCfg map[string]any
 	if cfg, find := workloadCfg[namespace]; find {

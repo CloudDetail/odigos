@@ -60,7 +60,7 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 
 	var nsList []string
 	for _, ns := range namespaceList.Items {
-		if ns.Name == "kube-system" {
+		if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
 			// 永远不操作kube-system下面的资源
 			continue
 		}

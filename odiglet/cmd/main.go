@@ -12,7 +12,6 @@ import (
 	"github.com/odigos-io/odigos/odiglet/pkg/instrumentation/instrumentlang"
 	"github.com/odigos-io/odigos/odiglet/pkg/kube"
 	"github.com/odigos-io/odigos/odiglet/pkg/log"
-	"github.com/odigos-io/odigos/opampserver/pkg/server"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -58,18 +57,18 @@ func main() {
 		os.Exit(-1)
 	}
 
-	err = server.StartOpAmpServer(ctx, log.Logger, mgr, clientset, env.Current.NodeName)
-	if err != nil {
-		log.Logger.Error(err, "Failed to start opamp server")
-	}
+	// err = server.StartOpAmpServer(ctx, log.Logger, mgr, clientset, env.Current.NodeName)
+	// if err != nil {
+	// 	log.Logger.Error(err, "Failed to start opamp server")
+	// }
 
-	ebpfDirectors, err := initEbpf(ctx, mgr.GetClient(), mgr.GetScheme())
-	if err != nil {
-		log.Logger.Error(err, "Failed to init eBPF director")
-		os.Exit(-1)
-	}
+	// ebpfDirectors, err := initEbpf(ctx, mgr.GetClient(), mgr.GetScheme())
+	// if err != nil {
+	// 	log.Logger.Error(err, "Failed to init eBPF director")
+	// 	os.Exit(-1)
+	// }
 
-	err = kube.SetupWithManager(mgr, ebpfDirectors)
+	err = kube.SetupWithManager(mgr)
 	if err != nil {
 		log.Logger.Error(err, "Failed to setup controller-runtime manager")
 		os.Exit(-1)
@@ -82,9 +81,9 @@ func main() {
 	}
 
 	<-ctx.Done()
-	for _, director := range ebpfDirectors {
-		director.Shutdown()
-	}
+	// for _, director := range ebpfDirectors {
+	// 	director.Shutdown()
+	// }
 }
 
 func startDeviceManager(clientset *kubernetes.Clientset) {
@@ -93,9 +92,9 @@ func startDeviceManager(clientset *kubernetes.Clientset) {
 	defer cancel()
 
 	otelSdkLsf := map[common.ProgrammingLanguage]map[common.OtelSdk]instrumentation.LangSpecificFunc{
-		common.GoProgrammingLanguage: {
-			common.OtelSdkEbpfCommunity: instrumentlang.Go,
-		},
+		// common.GoProgrammingLanguage: {
+		// 	common.OtelSdkEbpfCommunity: instrumentlang.Go,
+		// },
 		common.JavaProgrammingLanguage: {
 			common.OtelSdkNativeCommunity: instrumentlang.Java,
 			common.SWSdkCommunity:         instrumentlang.JavaInSkywalking,
