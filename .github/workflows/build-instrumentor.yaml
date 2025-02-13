@@ -63,5 +63,5 @@ jobs:
     - name: Build docker image and push (ARM64)
       if: matrix.arch == 'arm64'
       run: |
-        make build-instrumentor BUILD_ARG="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm64 ORG=${{ env.DOCKERHUB_REPO }}
-        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}-arm64
+        make build-instrumentor BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm64 ORG=${{ env.DOCKERHUB_REPO }}
+        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}-arm

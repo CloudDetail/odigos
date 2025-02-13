@@ -1,14 +1,14 @@
 TAG ?= $(shell git describe --tags --always)
 ORG := keyval
-BUILD_ARG ?=
+BUILD_ARGS ?=
 
 .PHONY: build-odiglet
 build-odiglet:
-	docker build ${BUILD_ARG}  -t $(ORG)/odigos-odiglet:$(TAG) . -f odiglet/Dockerfile --build-arg ODIGOS_VERSION=$(TAG)
+	docker build ${BUILD_ARGS}  -t $(ORG)/odigos-odiglet:$(TAG) . -f odiglet/Dockerfile --build-arg ODIGOS_VERSION=$(TAG)
 
 .PHONY: build-instrumentor
 build-instrumentor:
-	docker build ${BUILD_ARG} -t $(ORG)/odigos-instrumentor:$(TAG) . --build-arg SERVICE_NAME=instrumentor
+	docker build ${BUILD_ARGS} -t $(ORG)/odigos-instrumentor:$(TAG) . --build-arg SERVICE_NAME=instrumentor
 
 .PHONY: build-images
 build-images:
