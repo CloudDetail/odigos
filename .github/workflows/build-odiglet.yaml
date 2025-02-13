@@ -1,0 +1,67 @@
+name: Build binary and docker image
+
+on:
+  push:
+    tags:
+    - v*
+  workflow_dispatch:
+
+
+env:
+  APP_NAME: apo-odigos-instrumentor
+  DOCKERHUB_REPO: registry.cn-hangzhou.aliyuncs.com/kindlingx/${{ env.APP_NAME }}
+
+jobs:
+  main:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
+        include:
+        - os: ubuntu-latest
+          arch: amd64
+        # - os: ubuntu-24.04-arm
+        #   arch: arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.21
+
+    - name: Generate App Version
+      run: |
+        TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+        if [ -n "$TAG" ]; then
+          echo "APP_VERSION=$TAG" >> $GITHUB_ENV
+        else
+          BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's#[^a-zA-Z0-9._-]#-#g')
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "APP_VERSION=${BRANCH}-${COMMIT}" >> $GITHUB_ENV
+        fi
+
+    - name: Build binary
+      run: |
+        VERSION=${{ env.APP_VERSION }} make dist
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        registry: registry.cn-hangzhou.aliyuncs.com
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+
+    - name: Build docker image and push (AMD64)
+      if: matrix.arch == 'amd64'
+      run: |
+        make build-odiglet TAG=${{ env.APP_VERSION }} ORG=${{ env.DOCKERHUB_REPO }}
+        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}
+
+    - name: Build docker image and push (ARM64)
+      if: matrix.arch == 'arm64'
+      run: |
+        make build-odiglet BUILD_ARG="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm64 ORG=${{ env.DOCKERHUB_REPO }}
+        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}-arm64
