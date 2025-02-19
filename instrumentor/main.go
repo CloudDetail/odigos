@@ -122,6 +122,7 @@ func main() {
 		mgr.Add(setupMgr)
 	} else {
 		setupLog.Error(err, "unable to create setup manager")
+		os.Exit(1)
 	}
 
 	if setupMgr != nil {
