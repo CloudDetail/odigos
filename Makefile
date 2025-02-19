@@ -1,5 +1,5 @@
 TAG ?= $(shell git describe --tags --always)
-ORG := keyval
+ORG ?= keyval
 BUILD_ARGS ?=
 
 .PHONY: build-odiglet
