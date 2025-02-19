@@ -9,7 +9,7 @@ on:
 
 env:
   APP_NAME: apo-odigos-instrumentor
-  DOCKERHUB_REPO: registry.cn-hangzhou.aliyuncs.com/kindlingx
+  REGISTRY_HOST: registry.cn-hangzhou.aliyuncs.com/kindlingx
 
 jobs:
   main:
