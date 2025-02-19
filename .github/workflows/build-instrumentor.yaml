@@ -9,7 +9,7 @@ on:
 
 env:
   APP_NAME: apo-odigos-instrumentor
-  DOCKERHUB_REPO: registry.cn-hangzhou.aliyuncs.com/kindlingx/apo-odigos-instrumentor
+  DOCKERHUB_REPO: registry.cn-hangzhou.aliyuncs.com/kindlingx
 
 jobs:
   main:
@@ -43,10 +43,6 @@ jobs:
           echo "APP_VERSION=${BRANCH}-${COMMIT}" >> $GITHUB_ENV
         fi
 
-    - name: Build binary
-      run: |
-        VERSION=${{ env.APP_VERSION }} make dist
-
     - name: Login to DockerHub
       uses: docker/login-action@v2
       with:
@@ -57,11 +53,11 @@ jobs:
     - name: Build docker image and push (AMD64)
       if: matrix.arch == 'amd64'
       run: |
-        make build-instrumentor TAG=${{ env.APP_VERSION }} ORG=${{ env.DOCKERHUB_REPO }}
-        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}
+        make build-instrumentor TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
+        docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}
 
     - name: Build docker image and push (ARM64)
       if: matrix.arch == 'arm64'
       run: |
-        make build-instrumentor BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm64 ORG=${{ env.DOCKERHUB_REPO }}
-        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}-arm
+        make build-instrumentor BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm ORG=${{ env.REGISTRY_HOST }}
+        docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}-arm

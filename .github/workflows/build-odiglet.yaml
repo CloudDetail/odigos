@@ -8,8 +8,8 @@ on:
 
 
 env:
-  APP_NAME: apo-odigos-instrumentor
-  DOCKERHUB_REPO: registry.cn-hangzhou.aliyuncs.com/kindlingx/apo-odigos-instrumentor
+  APP_NAME: apo-odigos-odiglet
+  REGISTRY_HOST: registry.cn-hangzhou.aliyuncs.com/kindlingx
 
 jobs:
   main:
@@ -57,11 +57,11 @@ jobs:
     - name: Build docker image and push (AMD64)
       if: matrix.arch == 'amd64'
       run: |
-        make build-odiglet TAG=${{ env.APP_VERSION }} ORG=${{ env.DOCKERHUB_REPO }}
-        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}
+        make build-odiglet TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
+        docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}
 
     - name: Build docker image and push (ARM64)
       if: matrix.arch == 'arm64'
       run: |
-        make build-odiglet BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm64 ORG=${{ env.DOCKERHUB_REPO }}
-        docker push ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}-arm
+        make build-odiglet BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm ORG=${{ env.REGISTRY_HOST }}
+        docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}-arm
