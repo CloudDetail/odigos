@@ -19,11 +19,11 @@ RUN yum install -y gcc
 # setup rust proxy
 # ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
 # ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
-# ENV PATH $PATH:/root/.cargo/bin
 
 # Install Rustup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y
 RUN /root/.cargo/bin/rustup default stable
+ENV PATH $PATH:/root/.cargo/bin
 
 COPY preload /src/preload
 WORKDIR /src/preload
