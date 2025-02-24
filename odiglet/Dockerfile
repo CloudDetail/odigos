@@ -5,21 +5,21 @@ FROM --platform=$TARGETPLATFORM centos:centos7.9.2009 as preload
 ARG TARGETPLATFORM
 
 # set up centos-vault mirror
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo; \
-    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-altarch-7.repo; \
-    else \
-        echo "ERROR: Unsupported platform: $TARGETPLATFORM"; \
-        exit 1; \
-    fi
+# RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+#         curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo; \
+#     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+#         curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-altarch-7.repo; \
+#     else \
+#         echo "ERROR: Unsupported platform: $TARGETPLATFORM"; \
+#         exit 1; \
+#     fi
 
 RUN yum install -y gcc
 
 # setup rust proxy
-ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
-ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
-ENV PATH $PATH:/root/.cargo/bin
+# ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
+# ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+# ENV PATH $PATH:/root/.cargo/bin
 
 # Install Rustup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y
@@ -29,7 +29,7 @@ COPY preload /src/preload
 WORKDIR /src/preload
 
 RUN mkdir -p /etc/apo/instrument && gcc -std=c99 -o /etc/apo/instrument/libapolanucher.so -shared launcher/lanucher.c -Wall -Wfatal-errors -fPIC -ldl
-COPY preload/.apo-config/cargo-proxy.toml /usr/local/cargo/config.toml
+# COPY preload/.apo-config/cargo-proxy.toml /usr/local/cargo/config.toml
 RUN cd /src/preload/instrument && cargo build --release  && cp target/release/libapoinstrument.so /etc/apo/instrument/.
 COPY preload/.apo-config/* /etc/apo/instrument/.
 RUN chmod -R 755 /etc/apo/instrument/.
@@ -47,7 +47,7 @@ WORKDIR /go/src/github.com/odigos-io/odigos/odiglet
 COPY odiglet/ .
 
 ARG TARGETARCH
-ENV GOPROXY https://goproxy.cn
+# ENV GOPROXY https://goproxy.cn
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
