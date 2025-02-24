@@ -5,14 +5,14 @@ FROM --platform=$TARGETPLATFORM centos:centos7.9.2009 as preload
 ARG TARGETPLATFORM
 
 # set up centos-vault mirror
-# RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-#         curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo; \
-#     elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-#         curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-altarch-7.repo; \
-#     else \
-#         echo "ERROR: Unsupported platform: $TARGETPLATFORM"; \
-#         exit 1; \
-#     fi
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+        curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo; \
+    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+        curl -L -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-altarch-7.repo; \
+    else \
+        echo "ERROR: Unsupported platform: $TARGETPLATFORM"; \
+        exit 1; \
+    fi
 
 RUN yum install -y gcc
 
