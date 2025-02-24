@@ -15,7 +15,7 @@ jobs:
   main:
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm ]
+        os: [ ubuntu-latest ]
         include:
         - os: ubuntu-latest
           arch: amd64
