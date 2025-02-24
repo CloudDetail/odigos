@@ -3,12 +3,16 @@ ORG ?= keyval
 BUILD_ARGS ?=
 
 .PHONY: build-odiglet
-build-odiglet:
+build-odiglet: unzip-compiled-agent
 	docker build ${BUILD_ARGS}  -t $(ORG)/apo-odigos-odiglet:$(TAG) . -f odiglet/Dockerfile --build-arg ODIGOS_VERSION=$(TAG)
 
 .PHONY: build-instrumentor
 build-instrumentor:
 	docker build ${BUILD_ARGS} -t $(ORG)/apo-odigos-instrumentor:$(TAG) . --build-arg SERVICE_NAME=instrumentor
+
+unzip-compiled-agent:
+	tar -zvxf nodejs-instrumentation.tar.gz
+	tar -zvxf tracer-home.tar
 
 .PHONY: build-images
 build-images:
