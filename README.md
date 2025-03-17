@@ -1,11 +1,10 @@
-### 修改说明
+### Modifications
 
-在[Odigos](https://github.com/odigos-io/odigos/tree/v1.0.76s) 基础上进行了如下修改:
+This is a modified version of [Odigos](https://github.com/odigos-io/odigos/tree/v1.0.76s) with the following changes:
 
-1. 使用Webhook拆分了探针注入流程,现在用户选择需要注入探针的应用后,应用不再会立即重启并应用探针;而是等到下次用户手动重启应用才注入探针;
-2. 改用了自定义的(JAVA/Python/NodeJS)探针
-3. 移除了探针对Odigos-Collector的直接依赖,允许用户通过环境变量自定义接收端点
-
+1. Redesigned the agent injection process using webhooks - applications won't restart immediately after being selected for instrumentation. Instead, the agent will be injected during the next manual application restart.
+2. Replaced the default agents with custom implementations for Java, Python, and NodeJS.
+3. Removed direct dependency on Odigos-Collector, allowing users to configure custom endpoints through environment variables.
 
 <p align="center">
 <img src="assets/logo.png" width="350" /></br>
