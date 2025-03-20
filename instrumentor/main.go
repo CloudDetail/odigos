@@ -181,10 +181,17 @@ func createSetupManager() (*setup.SetupManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := client.New(k8sCfg, client.Options{})
+	client, err := client.NewWithWatch(k8sCfg, client.Options{
+		Scheme: runtime.NewScheme(),
+	})
 	if err != nil {
 		return nil, err
 	}
+
+	if err := corev1.AddToScheme(client.Scheme()); err != nil {
+		return nil, err
+	}
+
 	smgr := setup.NewSetupManager(setupLog, setupCfg, client)
 	return smgr, nil
 }

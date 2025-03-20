@@ -21,6 +21,9 @@ import (
  */
 
 type NamespaceInstrumentRule struct {
+	nsCfg map[string]any
+
+	checkedNamespace []string
 }
 
 func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Client) ([]string, error) {
@@ -32,7 +35,6 @@ func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Cli
 	}
 
 	var nsList []string
-
 	// TODO deal with error
 	for _, ns := range namespaceList.Items {
 		if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
@@ -46,11 +48,14 @@ func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Cli
 			return nil, err
 		}
 	}
+
+	r.checkedNamespace = nsList
 	return nsList, nil
 }
 
 func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, cfg *viper.Viper, defaultEnable bool) ([]string, error) {
-	nsCfg := cfg.GetStringMap("namespace")
+	r.nsCfg = cfg.GetStringMap("namespace")
+
 	// List all namespaces in the cluster using the client
 	namespaceList := &corev1.NamespaceList{}
 	err := c.List(context.Background(), namespaceList)
@@ -66,7 +71,7 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 		}
 		logger.Info("check namespace", "name", ns.Name)
 		nsList = append(nsList, ns.Name)
-		op, find := nsCfg[ns.Name]
+		op, find := r.nsCfg[ns.Name]
 		isEnabled := checkIfEnabled(find, op, defaultEnable)
 		if !isEnabled {
 			value, find := ns.GetLabels()[consts.OdigosInstrumentationLabel]
@@ -82,7 +87,7 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 			return nsList, err
 		}
 	}
-
+	r.checkedNamespace = nsList
 	return nsList, nil
 }
 

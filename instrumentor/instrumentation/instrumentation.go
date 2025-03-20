@@ -150,23 +150,12 @@ func getEnvVarsOfContainer(instrumentation *odigosv1.InstrumentedApplication, co
 }
 
 func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, obj client.Object, sdk common.OtelSdk, manifestEnvOriginal *envoverwrite.OrigWorkloadEnvValues) error {
-
 	observedEnvs := getEnvVarsOfContainer(runtimeDetails, container.Name)
 
 	// Step 1: check existing environment on the manifest and update them if needed
 	newEnvs := make([]corev1.EnvVar, 0, len(container.Env))
 	for _, envVar := range container.Env {
-
-		// extract the observed value for this env var, which might be empty if not currently exists
-		observedEnvValue := observedEnvs[envVar.Name]
-
-		var desiredEnvValue *string
-		if OverwriteUserDefinedEnvs {
-			desiredEnvValue = envOverwrite.GetPatchedEnvValueAndIgnoreObservedValue(envVar.Name, observedEnvValue, sdk)
-		} else {
-			desiredEnvValue = envOverwrite.GetPatchedEnvValue(envVar.Name, observedEnvValue, sdk)
-		}
-
+		var desiredEnvValue = envOverwrite.PatchedEnvValueWithOdigosPart(envVar.Name, envVar.Value, sdk)
 		if desiredEnvValue == nil {
 			// no need to patch this env var, so make sure it is reverted to its original value
 			origValue, found := manifestEnvOriginal.RemoveOriginalValue(container.Name, envVar.Name)
@@ -198,17 +187,21 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 		delete(observedEnvs, envVar.Name)
 	}
 
-	// Step 2: add the new env vars which odigos might patch, but which are not defined in the manifest
-	for envName, envValue := range observedEnvs {
-		desiredEnvValue := envOverwrite.GetPatchedEnvValue(envName, envValue, sdk)
-		if desiredEnvValue != nil {
-			// store that it was empty to begin with
-			manifestEnvOriginal.InsertOriginalValue(container.Name, envName, nil)
-			// and add this new env var to the manifest
-			newEnvs = append(newEnvs, corev1.EnvVar{
-				Name:  envName,
-				Value: *desiredEnvValue,
-			})
+	// Used for ENV defined in Dockerfile
+	// Supplement the variables defined by the user inside the container into the manifest, and append the Odigos part.
+	if !OverwriteUserDefinedEnvs {
+		// Step 2: add the new env vars which odigos might patch, but which are not defined in the manifest
+		for envName, envValue := range observedEnvs {
+			desiredEnvValue := envOverwrite.GetPatchedEnvValue(envName, envValue, sdk)
+			if desiredEnvValue != nil {
+				// store that it was empty to begin with
+				manifestEnvOriginal.InsertOriginalValue(container.Name, envName, nil)
+				// and add this new env var to the manifest
+				newEnvs = append(newEnvs, corev1.EnvVar{
+					Name:  envName,
+					Value: *desiredEnvValue,
+				})
+			}
 		}
 	}
 
