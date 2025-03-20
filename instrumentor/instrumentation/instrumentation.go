@@ -189,7 +189,7 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 
 	// Used for ENV defined in Dockerfile
 	// Supplement the variables defined by the user inside the container into the manifest, and append the Odigos part.
-	if OverwriteUserDefinedEnvs {
+	if !OverwriteUserDefinedEnvs {
 		// Step 2: add the new env vars which odigos might patch, but which are not defined in the manifest
 		for envName, envValue := range observedEnvs {
 			desiredEnvValue := envOverwrite.GetPatchedEnvValue(envName, envValue, sdk)
