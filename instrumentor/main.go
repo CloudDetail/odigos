@@ -20,6 +20,7 @@ import (
 	"flag"
 	"os"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/odigos-io/odigos/common/consts"
@@ -189,6 +190,10 @@ func createSetupManager() (*setup.SetupManager, error) {
 	}
 
 	if err := corev1.AddToScheme(client.Scheme()); err != nil {
+		return nil, err
+	}
+
+	if err := appsv1.AddToScheme(client.Scheme()); err != nil {
 		return nil, err
 	}
 
