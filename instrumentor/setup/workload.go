@@ -103,10 +103,6 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 				defaultEnable = true
 			}
 		}
-
-		if !defaultEnable && len(namespacedCfg) == 0 {
-			return nil
-		}
 	}
 
 	statefulset := &appsv1.StatefulSetList{}
