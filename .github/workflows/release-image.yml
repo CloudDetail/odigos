@@ -74,6 +74,8 @@ jobs:
     - name: Build odiglet docker image and push (AMD64)
       if: matrix.arch == 'amd64'
       run: |
+        tar -zvxf nodejs-instrumentation.tar.gz
+        tar -zvxf tracer-home.tar
         make build-odiglet TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ secrets.REGISTRY_USERNAME }}
         docker push ${{ env.ODIGLET_IMAGE_FULL_TAG_AMD64 }}
 
