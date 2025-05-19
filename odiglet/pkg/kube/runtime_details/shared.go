@@ -2,6 +2,7 @@ package runtime_details
 
 import (
 	"context"
+	"strings"
 
 	procdiscovery "github.com/odigos-io/odigos/procdiscovery/pkg/process"
 
@@ -92,6 +93,11 @@ func runtimeInspection(pods []corev1.Pod, ignoredContainers []string) ([]odigosv
 				lang, detectErr = inspectors.DetectLanguage(proc)
 				if detectErr == nil && lang != common.UnknownProgrammingLanguage {
 					inspectProc = &proc
+					if lang == common.PythonProgrammingLanguage &&
+						strings.Contains(proc.CmdLine, "supervisord") {
+						// supervisord usually work as daemon for real service, try more processes
+						continue
+					}
 					break
 				}
 			}
