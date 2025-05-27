@@ -4,7 +4,7 @@ BUILD_ARGS ?=
 
 .PHONY: build-odiglet
 build-odiglet: unzip-compiled-agent
-	docker build ${BUILD_ARGS}  -t $(ORG)/apo-odigos-odiglet:$(TAG) . -f odiglet/Dockerfile --build-arg ODIGOS_VERSION=$(TAG)
+	docker build ${BUILD_ARGS}  -t $(ORG)/apo-odigos-odiglet:$(TAG) . --build-arg ODIGOS_VERSION=$(TAG)
 
 .PHONY: build-instrumentor
 build-instrumentor:

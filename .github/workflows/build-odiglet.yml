@@ -19,8 +19,8 @@ jobs:
         include:
         - os: ubuntu-latest
           arch: amd64
-        # - os: ubuntu-24.04-arm
-        #   arch: arm64
+        - os: ubuntu-24.04-arm
+          arch: arm64
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -55,11 +55,11 @@ jobs:
     - name: Build docker image and push (AMD64)
       if: matrix.arch == 'amd64'
       run: |
-        make build-odiglet TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
+        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile.arm" TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
         docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}
 
     - name: Build docker image and push (ARM64)
       if: matrix.arch == 'arm64'
       run: |
-        make build-odiglet BUILD_ARGS="--platform linux/arm64" TAG=${{ env.APP_VERSION }}-arm ORG=${{ env.REGISTRY_HOST }}
+        make build-odiglet BUILD_ARGS="--platform linux/arm64 -f odiglet/Dockerfile.arm" TAG=${{ env.APP_VERSION }}-arm ORG=${{ env.REGISTRY_HOST }}
         docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}-arm
