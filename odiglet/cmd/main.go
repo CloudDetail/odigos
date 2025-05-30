@@ -92,9 +92,9 @@ func startDeviceManager(clientset *kubernetes.Clientset) {
 	defer cancel()
 
 	otelSdkLsf := map[common.ProgrammingLanguage]map[common.OtelSdk]instrumentation.LangSpecificFunc{
-		// common.GoProgrammingLanguage: {
-		// 	common.OtelSdkEbpfCommunity: instrumentlang.Go,
-		// },
+		common.GoProgrammingLanguage: {
+			common.OtelSdkEbpfCommunity: instrumentlang.Go,
+		},
 		common.JavaProgrammingLanguage: {
 			common.OtelSdkNativeCommunity: instrumentlang.Java,
 			common.SWSdkCommunity:         instrumentlang.JavaInSkywalking,
