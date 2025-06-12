@@ -81,10 +81,18 @@ COPY  ./tracer-home /instrumentations/dotnet
 
 RUN chmod -R +x /instrumentations
 
+FROM --platform=$TARGETPLATFORM clux/muslrust:1.79.0-stable as preload_musl
+COPY preload /src/preload
+WORKDIR /src/preload
+RUN cd /src/preload/instrument && cargo build --release --target x86_64-unknown-linux-musl  && cp target/x86_64-unknown-linux-musl/release/libapoinstrument.so /etc/apo/instrument/libapoinstrument_musl.so
+RUN chmod -R 755 /etc/apo/instrument/.
+
 FROM --platform=$TARGETPLATFORM registry.fedoraproject.org/fedora-minimal:38
 COPY --from=builder /go/src/github.com/odigos-io/odigos/odiglet/odiglet /root/odiglet
 WORKDIR /instrumentations/
 COPY --from=builder /instrumentations/ .
 COPY --from=builder /opt/ini-merger /usr/bin/ini-merger
 COPY --from=preload /etc/apo /etc/apo
+COPY --from=preload_musl /etc/apo/instrument/libapoinstrument_musl.so /etc/apo/instrument/libapoinstrument_musl.so
+
 CMD ["/root/odiglet"]
