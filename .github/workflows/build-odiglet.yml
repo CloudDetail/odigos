@@ -55,7 +55,7 @@ jobs:
     - name: Build docker image and push (AMD64)
       if: matrix.arch == 'amd64'
       run: |
-        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile.arm" TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
+        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile" TAG=${{ env.APP_VERSION }} ORG=${{ env.REGISTRY_HOST }}
         docker push ${{ env.REGISTRY_HOST }}/${{ env.APP_NAME }}:${{ env.APP_VERSION }}
 
     - name: Build docker image and push (ARM64)
