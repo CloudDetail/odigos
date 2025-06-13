@@ -76,7 +76,7 @@ jobs:
       run: |
         tar -zvxf nodejs-instrumentation.tar.gz
         tar -zvxf tracer-home.tar
-        make build-odiglet TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ secrets.REGISTRY_USERNAME }}
+        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile" TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ secrets.REGISTRY_USERNAME }}
         docker push ${{ env.ODIGLET_IMAGE_FULL_TAG_AMD64 }}
 
     - name: push tag
