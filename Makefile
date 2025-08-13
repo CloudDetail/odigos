@@ -27,6 +27,14 @@ push-odiglet:
 push-instrumentor:
 	docker buildx build --platform linux/amd64,linux/arm64/v8 --push -t $(ORG)/apo-odigos-instrumentor:$(TAG) . --build-arg SERVICE_NAME=instrumentor
 
+.PHONY: push-odiglet-arm64
+push-odiglet:
+	docker buildx build --platform linux/arm64/v8 --push -t $(ORG)/apo-odigos-odiglet:$(TAG) . -f odiglet/Dockerfile
+
+.PHONY: push-instrumentor-arm64
+push-instrumentor:
+	docker buildx build --platform linux/arm64/v8 --push -t $(ORG)/apo-odigos-instrumentor:$(TAG) . --build-arg SERVICE_NAME=instrumentor
+
 .PHONY: push-images
 push-images:
 	make push-odiglet TAG=$(TAG)
