@@ -85,7 +85,7 @@ jobs:
     - name: Build instrumentor docker image and push (AMD64)
       if: matrix.arch == 'amd64' && github.event_name == 'workflow_dispatch'
       run: |
-        make build-instrumentor TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ env.REGISTRY_USERNAME_ARM }}
+        make build-instrumentor TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ secrets.REGISTRY_USERNAME }}
         docker push ${{ env.INSTRUMENTOR_IMAGE_FULL_TAG_AMD64 }}
 
     - name: Build odiglet docker image and push (AMD64)
@@ -93,7 +93,7 @@ jobs:
       run: |
         tar -zvxf nodejs-instrumentation.tar.gz
         tar -zvxf tracer-home.tar
-        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile" TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ env.REGISTRY_USERNAME_ARM }}
+        make build-odiglet BUILD_ARGS="-f odiglet/Dockerfile" TAG=${{ github.event.inputs.tag }} ORG=${{ env.REGISTRY_HOST }}/${{ secrets.REGISTRY_USERNAME }}
         docker push ${{ env.ODIGLET_IMAGE_FULL_TAG_AMD64 }}
 
     - name: Build & push instrumentor (arm64)
