@@ -85,6 +85,7 @@ func TestDefaultServiceName(t *testing.T) {
 		deployName    string
 		containerName string
 		format        string
+		envs          map[string]string
 		want          string
 	}{
 		{
@@ -107,39 +108,88 @@ func TestDefaultServiceName(t *testing.T) {
 			want:          "checkout.api",
 		},
 		{
-			name:          "format applies regex to deployName",
+			name:          "format uses derived variable from workloadName",
 			deployName:    "checkout-v2",
 			containerName: "api",
-			format:        "${deployName|^(?P<service>.*)-v[0-9]+$|$service}.${containerName}",
-			want:          "checkout.api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_SOURCE":      "workloadName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "^(?P<service>.*)-v[0-9]+$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "$service",
+			},
+			want: "checkout.api",
 		},
 		{
-			name:          "format applies regex to containerName",
+			name:          "format uses derived variable from containerName",
 			deployName:    "checkout",
 			containerName: "api-main",
-			format:        "${deployName}.${containerName|^([^-]+).*$|$1}",
-			want:          "checkout.api",
+			format:        "${deployName}.${role}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_ROLE_SOURCE":      "containerName",
+				"ODIGOS_SERVICE_NAME_VAR_ROLE_REGEX":       "^([^-]+).*$",
+				"ODIGOS_SERVICE_NAME_VAR_ROLE_REPLACEMENT": "$1",
+			},
+			want: "checkout.api",
 		},
 		{
-			name:          "invalid regex falls back to original variable value",
+			name:          "derived variable supports snake case env names",
 			deployName:    "checkout",
-			containerName: "api",
-			format:        "${deployName|[|ignored}.${containerName}",
-			want:          "checkout.api",
+			containerName: "api-main",
+			format:        "${appRole}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_ROLE_SOURCE":      "containerName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_ROLE_REGEX":       "^([^-]+).*$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_ROLE_REPLACEMENT": "$1",
+			},
+			want: "api",
 		},
 		{
-			name:          "regex no match falls back to original variable value",
-			deployName:    "checkout",
+			name:          "derived variable supports workflowName source alias",
+			deployName:    "checkout-v2",
 			containerName: "api",
-			format:        "${deployName|^payment$|billing}.${containerName}",
-			want:          "checkout.api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_SOURCE":      "workflowName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "^(.*)-v[0-9]+$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "$1",
+			},
+			want: "checkout.api",
 		},
 		{
-			name:          "empty regex replacement falls back to original variable value",
+			name:          "invalid regex falls back to source value",
 			deployName:    "checkout",
 			containerName: "api",
-			format:        "${deployName|^checkout$|}.${containerName}",
-			want:          "checkout.api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_SOURCE":      "workloadName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "[",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "ignored",
+			},
+			want: "checkout.api",
+		},
+		{
+			name:          "regex no match falls back to source value",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_SOURCE":      "workloadName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "^payment$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "billing",
+			},
+			want: "checkout.api",
+		},
+		{
+			name:          "empty regex replacement falls back to source value",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_SOURCE":      "workloadName",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "^checkout$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "",
+			},
+			want: "checkout.api",
 		},
 		{
 			name:          "unknown variable falls back to default service name",
@@ -149,17 +199,24 @@ func TestDefaultServiceName(t *testing.T) {
 			want:          "checkout-api",
 		},
 		{
-			name:          "invalid regex expression falls back to default service name",
+			name:          "missing derived variable source falls back to default service name",
 			deployName:    "checkout",
 			containerName: "api",
-			format:        "${deployName|^checkout$}.${containerName}",
-			want:          "checkout-api",
+			format:        "${app}.${containerName}",
+			envs: map[string]string{
+				"ODIGOS_SERVICE_NAME_VAR_APP_REGEX":       "^checkout$",
+				"ODIGOS_SERVICE_NAME_VAR_APP_REPLACEMENT": "billing",
+			},
+			want: "checkout-api",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(ServiceNameDefaultFormatEnv, tt.format)
+			for key, value := range tt.envs {
+				t.Setenv(key, value)
+			}
 
 			got := DefaultServiceName(tt.deployName, tt.containerName)
 			assert.Equal(t, tt.want, got)

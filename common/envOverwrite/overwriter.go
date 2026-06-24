@@ -10,6 +10,10 @@ import (
 
 const ServiceNameEnvNamesEnv = "ODIGOS_SERVICE_NAME_ENV_NAMES"
 const ServiceNameDefaultFormatEnv = "ODIGOS_SERVICE_NAME_DEFAULT_FORMAT"
+const serviceNameVarPrefix = "ODIGOS_SERVICE_NAME_VAR_"
+const serviceNameVarSourceSuffix = "_SOURCE"
+const serviceNameVarRegexSuffix = "_REGEX"
+const serviceNameVarReplacementSuffix = "_REPLACEMENT"
 
 type envValues struct {
 	delim  string
@@ -180,9 +184,12 @@ func DefaultServiceName(deployName string, containerName string) string {
 	}
 
 	variables := map[string]string{
+		"workloadName":  deployName,
+		"workflowName":  deployName,
 		"deployName":    deployName,
 		"containerName": containerName,
 	}
+	addServiceNameDerivedVariables(variables)
 
 	rendered, ok := renderServiceNameFormat(format, variables)
 	if !ok || rendered == "" {
@@ -212,34 +219,114 @@ func renderServiceNameFormat(format string, variables map[string]string) (string
 }
 
 func renderServiceNameVariable(expression string, variables map[string]string) (string, bool) {
-	parts := strings.SplitN(expression, "|", 3)
-	if len(parts) == 1 {
-		value, ok := variables[expression]
+	value, ok := variables[expression]
+	return value, ok
+}
+
+type serviceNameDerivedVariable struct {
+	source      string
+	regex       string
+	replacement string
+}
+
+func addServiceNameDerivedVariables(variables map[string]string) {
+	derivedVariables := serviceNameDerivedVariablesFromEnv()
+	for variableName, variableConfig := range derivedVariables {
+		sourceValue, ok := serviceNameVariableSourceValue(variableConfig.source, variables)
+		if !ok {
+			continue
+		}
+
+		variables[variableName] = renderServiceNameDerivedVariable(sourceValue, variableConfig)
+	}
+}
+
+func serviceNameDerivedVariablesFromEnv() map[string]serviceNameDerivedVariable {
+	derivedVariables := make(map[string]serviceNameDerivedVariable)
+	for _, envEntry := range os.Environ() {
+		key, value, found := strings.Cut(envEntry, "=")
+		if !found || !strings.HasPrefix(key, serviceNameVarPrefix) {
+			continue
+		}
+
+		variableName, field, ok := serviceNameDerivedVariableEnvField(key)
+		if !ok {
+			continue
+		}
+
+		variableConfig := derivedVariables[variableName]
+		switch field {
+		case "source":
+			variableConfig.source = value
+		case "regex":
+			variableConfig.regex = value
+		case "replacement":
+			variableConfig.replacement = value
+		}
+		derivedVariables[variableName] = variableConfig
+	}
+	return derivedVariables
+}
+
+func serviceNameDerivedVariableEnvField(envName string) (string, string, bool) {
+	envName = strings.TrimPrefix(envName, serviceNameVarPrefix)
+
+	switch {
+	case strings.HasSuffix(envName, serviceNameVarSourceSuffix):
+		return serviceNameVariableName(strings.TrimSuffix(envName, serviceNameVarSourceSuffix)), "source", true
+	case strings.HasSuffix(envName, serviceNameVarRegexSuffix):
+		return serviceNameVariableName(strings.TrimSuffix(envName, serviceNameVarRegexSuffix)), "regex", true
+	case strings.HasSuffix(envName, serviceNameVarReplacementSuffix):
+		return serviceNameVariableName(strings.TrimSuffix(envName, serviceNameVarReplacementSuffix)), "replacement", true
+	default:
+		return "", "", false
+	}
+}
+
+func serviceNameVariableName(envVariableName string) string {
+	parts := strings.Split(strings.ToLower(envVariableName), "_")
+	if len(parts) == 0 {
+		return ""
+	}
+
+	variableName := parts[0]
+	for _, part := range parts[1:] {
+		if part == "" {
+			continue
+		}
+		variableName += strings.ToUpper(part[:1]) + part[1:]
+	}
+	return variableName
+}
+
+func serviceNameVariableSourceValue(source string, variables map[string]string) (string, bool) {
+	switch source {
+	case "workloadName", "workflowName", "deployName", "containerName":
+		value, ok := variables[source]
 		return value, ok
-	}
-
-	if len(parts) != 3 {
+	default:
 		return "", false
 	}
+}
 
-	value, ok := variables[parts[0]]
-	if !ok {
-		return "", false
+func renderServiceNameDerivedVariable(sourceValue string, variableConfig serviceNameDerivedVariable) string {
+	if variableConfig.regex == "" || variableConfig.replacement == "" {
+		return sourceValue
 	}
 
-	regex, err := regexp.Compile(parts[1])
+	regex, err := regexp.Compile(variableConfig.regex)
 	if err != nil {
-		return value, true
+		return sourceValue
 	}
 
-	if !regex.MatchString(value) {
-		return value, true
+	if !regex.MatchString(sourceValue) {
+		return sourceValue
 	}
 
-	rendered := regex.ReplaceAllString(value, parts[2])
+	rendered := regex.ReplaceAllString(sourceValue, variableConfig.replacement)
 	if rendered == "" {
-		return value, true
+		return sourceValue
 	}
 
-	return rendered, true
+	return rendered
 }
