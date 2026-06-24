@@ -89,7 +89,7 @@ func instrument(logger logr.Logger, ctx context.Context, kubeClient client.Clien
 			return err
 		}
 
-		err = instrumentation.ApplyInstrumentationDevicesToPodTemplate(podSpec, runtimeDetails, odigosConfig.Spec.DefaultSDKs, deepCpObj)
+		err = instrumentation.ApplyInstrumentationDevicesToPodTemplate(logger, podSpec, runtimeDetails, odigosConfig.Spec.DefaultSDKs, deepCpObj)
 		if err != nil {
 			return err
 		}

@@ -78,3 +78,91 @@ func TestGetPatchedEnvValue(t *testing.T) {
 	}
 
 }
+
+func TestDefaultServiceName(t *testing.T) {
+	tests := []struct {
+		name          string
+		deployName    string
+		containerName string
+		format        string
+		want          string
+	}{
+		{
+			name:          "default multi container",
+			deployName:    "checkout",
+			containerName: "api",
+			want:          "checkout-api",
+		},
+		{
+			name:          "default single container",
+			deployName:    "checkout",
+			containerName: "checkout",
+			want:          "checkout",
+		},
+		{
+			name:          "format with predefined variables",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${deployName}.${containerName}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "format applies regex to deployName",
+			deployName:    "checkout-v2",
+			containerName: "api",
+			format:        "${deployName|^(?P<service>.*)-v[0-9]+$|$service}.${containerName}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "format applies regex to containerName",
+			deployName:    "checkout",
+			containerName: "api-main",
+			format:        "${deployName}.${containerName|^([^-]+).*$|$1}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "invalid regex falls back to original variable value",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${deployName|[|ignored}.${containerName}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "regex no match falls back to original variable value",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${deployName|^payment$|billing}.${containerName}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "empty regex replacement falls back to original variable value",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${deployName|^checkout$|}.${containerName}",
+			want:          "checkout.api",
+		},
+		{
+			name:          "unknown variable falls back to default service name",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${service}.${containerName}",
+			want:          "checkout-api",
+		},
+		{
+			name:          "invalid regex expression falls back to default service name",
+			deployName:    "checkout",
+			containerName: "api",
+			format:        "${deployName|^checkout$}.${containerName}",
+			want:          "checkout-api",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(ServiceNameDefaultFormatEnv, tt.format)
+
+			got := DefaultServiceName(tt.deployName, tt.containerName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

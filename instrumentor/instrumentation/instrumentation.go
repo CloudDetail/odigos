@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/envOverwrite"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -23,7 +24,7 @@ var (
 	ErrPatchEnvVars = errors.New("failed to patch env vars")
 )
 
-func ApplyInstrumentationDevicesToPodTemplate(original *corev1.PodTemplateSpec, runtimeDetails *odigosv1.InstrumentedApplication, defaultSdks map[common.ProgrammingLanguage]common.OtelSdk, targetObj client.Object) error {
+func ApplyInstrumentationDevicesToPodTemplate(logger logr.Logger, original *corev1.PodTemplateSpec, runtimeDetails *odigosv1.InstrumentedApplication, defaultSdks map[common.ProgrammingLanguage]common.OtelSdk, targetObj client.Object) error {
 
 	// delete any existing instrumentation devices.
 	// this is necessary for example when migrating from community to enterprise,
@@ -55,7 +56,7 @@ func ApplyInstrumentationDevicesToPodTemplate(original *corev1.PodTemplateSpec, 
 		}
 		container.Resources.Limits[corev1.ResourceName(instrumentationDeviceName)] = resource.MustParse("1")
 
-		err = patchEnvVarsForContainer(runtimeDetails, &container, targetObj, otelSdk, manifestEnvOriginal)
+		err = patchEnvVarsForContainer(logger, runtimeDetails, &container, targetObj, otelSdk, manifestEnvOriginal)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrPatchEnvVars, err)
 		}
@@ -149,12 +150,31 @@ func getEnvVarsOfContainer(instrumentation *odigosv1.InstrumentedApplication, co
 	return envVars
 }
 
-func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, obj client.Object, sdk common.OtelSdk, manifestEnvOriginal *envoverwrite.OrigWorkloadEnvValues) error {
+func patchEnvVarsForContainer(logger logr.Logger, runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, obj client.Object, sdk common.OtelSdk, manifestEnvOriginal *envoverwrite.OrigWorkloadEnvValues) error {
 	observedEnvs := getEnvVarsOfContainer(runtimeDetails, container.Name)
+	serviceEnvNames, serviceEnvNamesFound := envOverwrite.ServiceNameEnv(sdk)
+	serviceEnvNameSet := envNameSet(serviceEnvNames)
+	userDefinedServiceName, userDefinedServiceNameFound, serviceNameSource := findUserDefinedServiceName(runtimeDetails, container, serviceEnvNames)
 
 	// Step 1: check existing environment on the manifest and update them if needed
 	newEnvs := make([]corev1.EnvVar, 0, len(container.Env))
 	for _, envVar := range container.Env {
+		if userDefinedServiceNameFound {
+			if _, isServiceNameEnv := serviceEnvNameSet[envVar.Name]; isServiceNameEnv {
+				if envVar.Value != userDefinedServiceName {
+					manifestEnvOriginal.InsertOriginalValue(container.Name, envVar.Name, &envVar.Value)
+					newEnvs = append(newEnvs, corev1.EnvVar{
+						Name:  envVar.Name,
+						Value: userDefinedServiceName,
+					})
+				} else {
+					newEnvs = append(newEnvs, envVar)
+				}
+				delete(observedEnvs, envVar.Name)
+				continue
+			}
+		}
+
 		var desiredEnvValue = envOverwrite.PatchedEnvValueWithOdigosPart(envVar.Name, envVar.Value, sdk)
 		if desiredEnvValue == nil {
 			// no need to patch this env var, so make sure it is reverted to its original value
@@ -206,9 +226,12 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 	}
 
 	// Step 3: auto discovery service name
-	svcNameEnv, ok := autoDiscoverServiceName(runtimeDetails, container, observedEnvs, sdk)
-	if ok {
-		newEnvs = append(newEnvs, svcNameEnv...)
+	if serviceEnvNamesFound {
+		svcNameEnv, serviceNameValue, ok := autoDiscoverServiceName(runtimeDetails, container, observedEnvs, serviceEnvNames, userDefinedServiceName, userDefinedServiceNameFound)
+		if ok {
+			logger.V(0).Info("resolved service name", "container", container.Name, "serviceName", serviceNameValue, "serviceNameEnvNames", serviceEnvNames, "source", serviceNameSource)
+			newEnvs = append(newEnvs, svcNameEnv...)
+		}
 	}
 
 	// Step 4: update the container with the new env vars
@@ -217,33 +240,69 @@ func patchEnvVarsForContainer(runtimeDetails *odigosv1.InstrumentedApplication, 
 	return nil
 }
 
-func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, observedEnvs map[string]string, sdk common.OtelSdk) ([]corev1.EnvVar, bool) {
-	serviceEnvName, find := envOverwrite.ServiceNameEnv(sdk)
-	if !find {
-		return nil, false
+func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, observedEnvs map[string]string, serviceEnvNames []string, serviceNameValue string, serviceNameValueFound bool) ([]corev1.EnvVar, string, bool) {
+	if len(serviceEnvNames) == 0 {
+		return nil, "", true
 	}
-	name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
-	if err != nil {
-		return nil, false
+
+	if !serviceNameValueFound {
+		name, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name)
+		if err != nil {
+			return nil, "", false
+		}
+		serviceNameValue = envOverwrite.DefaultServiceName(name, container.Name)
 	}
+
+	manifestEnvNames := make(map[string]string, len(container.Env))
+	for _, envVar := range container.Env {
+		manifestEnvNames[envVar.Name] = envVar.Value
+	}
+
 	var res = make([]corev1.EnvVar, 0)
-	for _, svcName := range serviceEnvName {
-		// 用户手动设置了ServiceName
-		if _, find := observedEnvs[svcName]; find {
+	for _, svcName := range serviceEnvNames {
+		if _, find := manifestEnvNames[svcName]; find {
 			continue
 		}
+		if observedValue, find := observedEnvs[svcName]; find && observedValue == serviceNameValue {
+			continue
+		}
+		res = append(res, corev1.EnvVar{
+			Name:  svcName,
+			Value: serviceNameValue,
+		})
+	}
+	return res, serviceNameValue, true
+}
 
-		if name != container.Name {
-			res = append(res, corev1.EnvVar{
-				Name:  svcName,
-				Value: fmt.Sprintf("%s-%s", name, container.Name),
-			})
-		} else {
-			res = append(res, corev1.EnvVar{
-				Name:  svcName,
-				Value: container.Name,
-			})
+func envNameSet(envNames []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(envNames))
+	for _, envName := range envNames {
+		set[envName] = struct{}{}
+	}
+	return set
+}
+
+func findUserDefinedServiceName(runtimeDetails *odigosv1.InstrumentedApplication, container *corev1.Container, serviceEnvNames []string) (string, bool, string) {
+	for _, serviceEnvName := range serviceEnvNames {
+		for _, envVar := range container.Env {
+			if envVar.Name == serviceEnvName {
+				return envVar.Value, true, "manifest"
+			}
 		}
 	}
-	return res, true
+
+	for _, runtimeDetail := range runtimeDetails.Spec.RuntimeDetails {
+		if runtimeDetail.ContainerName != container.Name {
+			continue
+		}
+		for _, serviceEnvName := range serviceEnvNames {
+			for _, envVar := range runtimeDetail.EnvVars {
+				if envVar.Name == serviceEnvName {
+					return envVar.Value, true, "runtimeDetails"
+				}
+			}
+		}
+	}
+
+	return "", false, "default"
 }

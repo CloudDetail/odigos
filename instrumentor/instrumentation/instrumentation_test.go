@@ -1,5 +1,182 @@
 package instrumentation
 
+import (
+	"testing"
+
+	"github.com/go-logr/logr"
+	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
+	"github.com/odigos-io/odigos/common"
+	"github.com/odigos-io/odigos/common/envOverwrite"
+	"github.com/odigos-io/odigos/k8sutils/pkg/envoverwrite"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+func TestPatchEnvVarsForContainerSyncsServiceNameFromManifestEnv(t *testing.T) {
+	runtimeDetails := &odigosv1.InstrumentedApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "deployment-checkout"},
+		Spec: odigosv1.InstrumentedApplicationSpec{
+			RuntimeDetails: []odigosv1.RuntimeDetailsByContainer{{
+				ContainerName: "api",
+				Language:      common.JavascriptProgrammingLanguage,
+			}},
+		},
+	}
+	container := &corev1.Container{
+		Name: "api",
+		Env: []corev1.EnvVar{
+			{Name: "SW_AGENT_NAME", Value: "old-service"},
+			{Name: "OTEL_SERVICE_NAME", Value: "checkout-api"},
+		},
+	}
+	targetObj := &appsv1.Deployment{}
+	manifestEnvOriginal, err := envoverwrite.NewOrigWorkloadEnvValues(targetObj)
+	if err != nil {
+		t.Fatalf("NewOrigWorkloadEnvValues() error = %v", err)
+	}
+
+	err = patchEnvVarsForContainer(logr.Discard(), runtimeDetails, container, targetObj, common.CustomSdkCommunity, manifestEnvOriginal)
+	if err != nil {
+		t.Fatalf("patchEnvVarsForContainer() error = %v", err)
+	}
+
+	assertEnvValue(t, container.Env, "OTEL_SERVICE_NAME", "checkout-api")
+	assertEnvValue(t, container.Env, "SW_AGENT_NAME", "checkout-api")
+	assertEnvCount(t, container.Env, "OTEL_SERVICE_NAME", 1)
+	assertEnvCount(t, container.Env, "SW_AGENT_NAME", 1)
+}
+
+func TestPatchEnvVarsForContainerReadsCustomServiceNameEnvName(t *testing.T) {
+	t.Setenv(envOverwrite.ServiceNameEnvNamesEnv, "DD_SERVICE")
+
+	runtimeDetails := &odigosv1.InstrumentedApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "deployment-checkout"},
+		Spec: odigosv1.InstrumentedApplicationSpec{
+			RuntimeDetails: []odigosv1.RuntimeDetailsByContainer{{
+				ContainerName: "api",
+				Language:      common.JavascriptProgrammingLanguage,
+			}},
+		},
+	}
+	container := &corev1.Container{
+		Name: "api",
+		Env: []corev1.EnvVar{
+			{Name: "DD_SERVICE", Value: "checkout-api"},
+		},
+	}
+	targetObj := &appsv1.Deployment{}
+	manifestEnvOriginal, err := envoverwrite.NewOrigWorkloadEnvValues(targetObj)
+	if err != nil {
+		t.Fatalf("NewOrigWorkloadEnvValues() error = %v", err)
+	}
+
+	err = patchEnvVarsForContainer(logr.Discard(), runtimeDetails, container, targetObj, common.OtelSdkNativeCommunity, manifestEnvOriginal)
+	if err != nil {
+		t.Fatalf("patchEnvVarsForContainer() error = %v", err)
+	}
+
+	assertEnvValue(t, container.Env, "DD_SERVICE", "checkout-api")
+	assertEnvValue(t, container.Env, "OTEL_SERVICE_NAME", "checkout-api")
+	assertEnvCount(t, container.Env, "DD_SERVICE", 1)
+	assertEnvCount(t, container.Env, "OTEL_SERVICE_NAME", 1)
+}
+
+func TestAutoDiscoverServiceNameReadsRuntimeDetailsServiceName(t *testing.T) {
+	runtimeDetails := &odigosv1.InstrumentedApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "deployment-checkout"},
+		Spec: odigosv1.InstrumentedApplicationSpec{
+			RuntimeDetails: []odigosv1.RuntimeDetailsByContainer{{
+				ContainerName: "api",
+				Language:      common.JavascriptProgrammingLanguage,
+				EnvVars: []odigosv1.EnvVar{
+					{Name: "SW_AGENT_NAME", Value: "runtime-service"},
+				},
+			}},
+		},
+	}
+	container := &corev1.Container{Name: "api"}
+	serviceEnvNames, ok := envOverwrite.ServiceNameEnv(common.CustomSdkCommunity)
+	if !ok {
+		t.Fatal("ServiceNameEnv() returned false")
+	}
+	serviceNameValue, serviceNameValueFound, _ := findUserDefinedServiceName(runtimeDetails, container, serviceEnvNames)
+
+	envs, _, ok := autoDiscoverServiceName(
+		runtimeDetails,
+		container,
+		map[string]string{"SW_AGENT_NAME": "runtime-service"},
+		serviceEnvNames,
+		serviceNameValue,
+		serviceNameValueFound,
+	)
+	if !ok {
+		t.Fatal("autoDiscoverServiceName() returned false")
+	}
+
+	assertEnvValue(t, envs, "OTEL_SERVICE_NAME", "runtime-service")
+	assertEnvCount(t, envs, "SW_AGENT_NAME", 0)
+}
+
+func TestAutoDiscoverServiceNameUsesConfiguredDefaultServiceNameFormat(t *testing.T) {
+	t.Setenv(envOverwrite.ServiceNameDefaultFormatEnv, "${deployName}.${containerName}")
+
+	runtimeDetails := &odigosv1.InstrumentedApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "deployment-checkout"},
+		Spec: odigosv1.InstrumentedApplicationSpec{
+			RuntimeDetails: []odigosv1.RuntimeDetailsByContainer{{
+				ContainerName: "api",
+				Language:      common.JavascriptProgrammingLanguage,
+			}},
+		},
+	}
+	container := &corev1.Container{Name: "api"}
+	serviceEnvNames, ok := envOverwrite.ServiceNameEnv(common.OtelSdkNativeCommunity)
+	if !ok {
+		t.Fatal("ServiceNameEnv() returned false")
+	}
+
+	envs, _, ok := autoDiscoverServiceName(
+		runtimeDetails,
+		container,
+		map[string]string{},
+		serviceEnvNames,
+		"",
+		false,
+	)
+	if !ok {
+		t.Fatal("autoDiscoverServiceName() returned false")
+	}
+
+	assertEnvValue(t, envs, "OTEL_SERVICE_NAME", "checkout.api")
+}
+
+func assertEnvValue(t *testing.T, envs []corev1.EnvVar, name string, value string) {
+	t.Helper()
+	for _, env := range envs {
+		if env.Name == name {
+			if env.Value != value {
+				t.Fatalf("env %s value = %q, want %q", name, env.Value, value)
+			}
+			return
+		}
+	}
+	t.Fatalf("env %s not found", name)
+}
+
+func assertEnvCount(t *testing.T, envs []corev1.EnvVar, name string, want int) {
+	t.Helper()
+	got := 0
+	for _, env := range envs {
+		if env.Name == name {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("env %s count = %d, want %d", name, got, want)
+	}
+}
+
 // import (
 // 	"encoding/json"
 // 	"testing"

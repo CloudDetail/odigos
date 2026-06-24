@@ -1,10 +1,15 @@
 package envOverwrite
 
 import (
+	"os"
+	"regexp"
 	"strings"
 
 	"github.com/odigos-io/odigos/common"
 )
+
+const ServiceNameEnvNamesEnv = "ODIGOS_SERVICE_NAME_ENV_NAMES"
+const ServiceNameDefaultFormatEnv = "ODIGOS_SERVICE_NAME_DEFAULT_FORMAT"
 
 type envValues struct {
 	delim  string
@@ -126,15 +131,115 @@ func ValToAppend(envName string, sdk common.OtelSdk) (string, bool) {
 }
 
 func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
+	var envNames []string
 	switch sdk.SdkType {
 	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
-		return []string{"OTEL_SERVICE_NAME", "EDAS_AHAS_APPNAME"}, true
+		envNames = []string{"OTEL_SERVICE_NAME", "EDAS_AHAS_APPNAME"}
 	case common.SWSdkType:
-		return []string{"SW_AGENT_NAME","EDAS_AHAS_APPNAME"}, true
+		envNames = []string{"SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}
 	case common.CustomSdkType:
 		// 不知道会用哪种SDK,姑且全部添加已知的ServiceName
-		return []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}, true
-	default:
-		return nil, false
+		envNames = []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}
 	}
+
+	envNames = appendServiceNameEnvNamesFromEnv(envNames)
+	return envNames, len(envNames) > 0
+}
+
+func appendServiceNameEnvNamesFromEnv(envNames []string) []string {
+	customEnvNames, ok := os.LookupEnv(ServiceNameEnvNamesEnv)
+	if !ok {
+		return envNames
+	}
+
+	existing := make(map[string]struct{}, len(envNames))
+	for _, envName := range envNames {
+		existing[envName] = struct{}{}
+	}
+
+	for _, envName := range strings.Split(customEnvNames, ",") {
+		envName = strings.TrimSpace(envName)
+		if envName == "" {
+			continue
+		}
+		if _, found := existing[envName]; found {
+			continue
+		}
+		envNames = append(envNames, envName)
+		existing[envName] = struct{}{}
+	}
+
+	return envNames
+}
+
+func DefaultServiceName(deployName string, containerName string) string {
+	defaultName := defaultServiceName(deployName, containerName)
+	format, formatFound := os.LookupEnv(ServiceNameDefaultFormatEnv)
+	if !formatFound || format == "" {
+		return defaultName
+	}
+
+	variables := map[string]string{
+		"deployName":    deployName,
+		"containerName": containerName,
+	}
+
+	rendered, ok := renderServiceNameFormat(format, variables)
+	if !ok || rendered == "" {
+		return defaultName
+	}
+
+	return rendered
+}
+
+func defaultServiceName(deployName string, containerName string) string {
+	if deployName != containerName {
+		return deployName + "-" + containerName
+	}
+	return containerName
+}
+
+func renderServiceNameFormat(format string, variables map[string]string) (string, bool) {
+	ok := true
+	rendered := os.Expand(format, func(expression string) string {
+		value, valueOk := renderServiceNameVariable(expression, variables)
+		if !valueOk {
+			ok = false
+		}
+		return value
+	})
+	return rendered, ok
+}
+
+func renderServiceNameVariable(expression string, variables map[string]string) (string, bool) {
+	parts := strings.SplitN(expression, "|", 3)
+	if len(parts) == 1 {
+		value, ok := variables[expression]
+		return value, ok
+	}
+
+	if len(parts) != 3 {
+		return "", false
+	}
+
+	value, ok := variables[parts[0]]
+	if !ok {
+		return "", false
+	}
+
+	regex, err := regexp.Compile(parts[1])
+	if err != nil {
+		return value, true
+	}
+
+	if !regex.MatchString(value) {
+		return value, true
+	}
+
+	rendered := regex.ReplaceAllString(value, parts[2])
+	if rendered == "" {
+		return value, true
+	}
+
+	return rendered, true
 }
