@@ -128,12 +128,12 @@ func ValToAppend(envName string, sdk common.OtelSdk) (string, bool) {
 func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
 	switch sdk.SdkType {
 	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
-		return []string{"OTEL_SERVICE_NAME"}, true
+		return []string{"OTEL_SERVICE_NAME", "EDAS_AHAS_APPNAME"}, true
 	case common.SWSdkType:
-		return []string{"SW_AGENT_NAME"}, true
+		return []string{"SW_AGENT_NAME","EDAS_AHAS_APPNAME"}, true
 	case common.CustomSdkType:
 		// 不知道会用哪种SDK,姑且全部添加已知的ServiceName
-		return []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME"}, true
+		return []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}, true
 	default:
 		return nil, false
 	}
