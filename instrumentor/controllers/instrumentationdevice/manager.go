@@ -8,6 +8,7 @@ import (
 	k8sutils "github.com/odigos-io/odigos/k8sutils/pkg/client"
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -20,6 +21,34 @@ import (
 type workloadNeedUpdateInstrument struct {
 	cfg *viper.Viper
 	workloadEnvChangePredicate
+}
+
+func shouldInstrumentOnCreate(obj client.Object, cfg *viper.Viper) bool {
+	logger := ctrl.Log.WithName("instrumentationdevice-workload-filter")
+	if getInstrumentEnabledLabelFromObject(obj) {
+		logger.Info("workload create event accepted because instrumentation label is enabled", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		return true
+	}
+
+	if cfg == nil {
+		logger.Info("workload create event ignored because instrumentation label is not enabled and setup config is not available", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		return false
+	}
+
+	if cfg.GetBool("force-instrument-all-namespace") || cfg.GetBool("instrument-all-namespace") {
+		logger.Info("workload create event accepted because namespace-wide instrumentation is enabled", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		return true
+	}
+
+	namespaceKey := fmt.Sprintf("namespace.%s", obj.GetNamespace())
+	status := cfg.GetString(namespaceKey)
+	accepted := status == "enabled" || status == "enabledFuture"
+	logger.Info("workload create event evaluated namespace instrumentation config", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind, "namespaceStatus", status, "accepted", accepted)
+	return accepted
+}
+
+func (w *workloadNeedUpdateInstrument) Create(e event.CreateEvent) bool {
+	return shouldInstrumentOnCreate(e.Object, w.cfg)
 }
 
 func (w *workloadNeedUpdateInstrument) Update(e event.UpdateEvent) bool {
@@ -68,7 +97,7 @@ type workloadEnvChangePredicate struct {
 }
 
 func (w workloadEnvChangePredicate) Create(e event.CreateEvent) bool {
-	return false
+	return shouldInstrumentOnCreate(e.Object, nil)
 }
 
 func (w workloadEnvChangePredicate) Update(e event.UpdateEvent) bool {
@@ -159,6 +188,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 		WithEventFilter(&workloadNeedUpdateInstrument{cfg: cfg}).
 		Complete(&DeploymentReconciler{
 			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
 		})
 	if err != nil {
 		return err
@@ -170,6 +200,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 		WithEventFilter(&workloadNeedUpdateInstrument{cfg: cfg}).
 		Complete(&DaemonSetReconciler{
 			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
 		})
 	if err != nil {
 		return err
@@ -181,6 +212,7 @@ func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
 		WithEventFilter(&workloadNeedUpdateInstrument{cfg: cfg}).
 		Complete(&StatefulSetReconciler{
 			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
 		})
 	if err != nil {
 		return err

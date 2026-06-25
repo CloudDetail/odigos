@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
@@ -115,13 +117,22 @@ func instrument(logger logr.Logger, ctx context.Context, kubeClient client.Clien
 			return err
 		}
 		if len(patchBytes) > 0 {
+			patchEnvNameHints := buildEnvNamePatchHints(rawPodSpec, patches)
 			patchBytesBase64 := base64.StdEncoding.EncodeToString(patchBytes)
+			patchEnvNameHintsBytes, err := json.Marshal(patchEnvNameHints)
+			if err != nil {
+				return err
+			}
+			patchEnvNameHintsBase64 := base64.StdEncoding.EncodeToString(patchEnvNameHintsBytes)
+			logger.Info("generated instrument patch for workload", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind, "patches", len(patches), "envNameHints", len(patchEnvNameHints))
 			if obj.GetAnnotations() == nil {
 				obj.SetAnnotations(map[string]string{
-					"originx-instrument-patch": patchBytesBase64,
+					consts.InstrumentPatchAnnotation:         patchBytesBase64,
+					consts.InstrumentPatchEnvNamesAnnotation: patchEnvNameHintsBase64,
 				})
 			} else {
-				obj.GetAnnotations()["originx-instrument-patch"] = patchBytesBase64
+				obj.GetAnnotations()[consts.InstrumentPatchAnnotation] = patchBytesBase64
+				obj.GetAnnotations()[consts.InstrumentPatchEnvNamesAnnotation] = patchEnvNameHintsBase64
 			}
 
 			if obj.GetLabels() == nil {
@@ -171,7 +182,8 @@ func uninstrument(logger logr.Logger, ctx context.Context, kubeClient client.Cli
 
 	result, err := controllerutil.CreateOrPatch(ctx, kubeClient, obj, func() error {
 		annos := obj.GetAnnotations()
-		delete(annos, "originx-instrument-patch")
+		delete(annos, consts.InstrumentPatchAnnotation)
+		delete(annos, consts.InstrumentPatchEnvNamesAnnotation)
 		return nil
 	})
 
@@ -184,6 +196,60 @@ func uninstrument(logger logr.Logger, ctx context.Context, kubeClient client.Cli
 	}
 
 	return nil
+}
+
+type EnvNamePatchHint struct {
+	ContainerName string `json:"containerName"`
+	EnvName       string `json:"envName"`
+	Field         string `json:"field"`
+}
+
+func buildEnvNamePatchHints(rawPodSpec *corev1.PodTemplateSpec, patches []jsonpatch.Operation) map[string]EnvNamePatchHint {
+	hints := make(map[string]EnvNamePatchHint)
+	for _, patch := range patches {
+		if patch.Operation != "replace" {
+			continue
+		}
+		containerIndex, envIndex, envField, ok := parseEnvFieldPatchPath(patch.Path)
+		if !ok {
+			continue
+		}
+		if containerIndex < 0 || containerIndex >= len(rawPodSpec.Spec.Containers) {
+			continue
+		}
+		container := rawPodSpec.Spec.Containers[containerIndex]
+		if envIndex < 0 || envIndex >= len(container.Env) {
+			continue
+		}
+		hints[patch.Path] = EnvNamePatchHint{
+			ContainerName: container.Name,
+			EnvName:       container.Env[envIndex].Name,
+			Field:         envField,
+		}
+	}
+	return hints
+}
+
+func parseEnvFieldPatchPath(path string) (containerIndex int, envIndex int, envField string, ok bool) {
+	parts := strings.Split(path, "/")
+	if len(parts) != 7 ||
+		parts[0] != "" ||
+		parts[1] != "spec" ||
+		parts[2] != "containers" ||
+		parts[4] != "env" ||
+		parts[6] == "" {
+		return 0, 0, "", false
+	}
+	containerIndex, err := strconv.Atoi(parts[3])
+	if err != nil {
+		return 0, 0, "", false
+	}
+	envIndex, err = strconv.Atoi(parts[5])
+	if err != nil {
+		return 0, 0, "", false
+	}
+	envField = parts[6]
+	return containerIndex, envIndex, envField, true
 }
 
 func getTargetObject(ctx context.Context, kubeClient client.Client, runtimeDetails *odigosv1.InstrumentedApplication) (client.Object, error) {
