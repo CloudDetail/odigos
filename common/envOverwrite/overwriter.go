@@ -138,12 +138,12 @@ func ServiceNameEnv(sdk common.OtelSdk) ([]string, bool) {
 	var envNames []string
 	switch sdk.SdkType {
 	case common.NativeOtelSdkType, common.EbpfOtelSdkType:
-		envNames = []string{"OTEL_SERVICE_NAME", "EDAS_AHAS_APPNAME"}
+		envNames = []string{"OTEL_SERVICE_NAME"}
 	case common.SWSdkType:
-		envNames = []string{"SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}
+		envNames = []string{"SW_AGENT_NAME"}
 	case common.CustomSdkType:
 		// 不知道会用哪种SDK,姑且全部添加已知的ServiceName
-		envNames = []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME", "EDAS_AHAS_APPNAME"}
+		envNames = []string{"OTEL_SERVICE_NAME", "SW_AGENT_NAME"}
 	}
 
 	envNames = appendServiceNameEnvNamesFromEnv(envNames)
