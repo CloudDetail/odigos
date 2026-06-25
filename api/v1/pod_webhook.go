@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/odigos-io/odigos/common/consts"
@@ -39,11 +41,28 @@ import (
 var podlog = logf.Log.WithName("patch-pod")
 
 const InstrumentPatchUseIndexEnv = "ORIGINX_INSTRUMENT_PATCH_USE_INDEX"
+const WorkloadNameRegexRulesEnv = "ODIGOS_WORKLOAD_NAME_REGEX_RULES"
 
 type envNamePatchHint struct {
 	ContainerName string `json:"containerName"`
 	EnvName       string `json:"envName"`
 	Field         string `json:"field"`
+}
+
+type workloadNameRegexRuleConfig struct {
+	Kinds []string `json:"kinds,omitempty"`
+	Regex string   `json:"regex"`
+}
+
+type podAdmissionNameRegexRule struct {
+	kinds map[string]struct{}
+	regex *regexp.Regexp
+}
+
+type podAdmissionNameMatch struct {
+	base    string
+	version int64
+	obj     client.Object
 }
 
 // +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,groups=core,resources=pods,verbs=create,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
@@ -105,8 +124,15 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	// 检查工作负载上的patch
 	patchB64, find := annotations[consts.InstrumentPatchAnnotation]
 	if !find || len(patchB64) <= 0 {
-		podlog.Info("skip pod instrumentation because owner has no instrument patch annotation", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "annotation", consts.InstrumentPatchAnnotation)
-		return admission.Allowed(fmt.Sprintf("no instrument annotations: %s/%s", ownerKind, ownerName))
+		podlog.Info("owner has no instrument patch annotation, trying name regex patch inheritance", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "annotation", consts.InstrumentPatchAnnotation)
+		inheritedAnnotations, inheritedFrom := a.inheritedPatchAnnotations(ctx, namespace, ownerKind, ownerName)
+		if inheritedAnnotations == nil {
+			podlog.Info("skip pod instrumentation because owner has no instrument patch annotation and no inherited patch was found", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "annotation", consts.InstrumentPatchAnnotation)
+			return admission.Allowed(fmt.Sprintf("no instrument annotations: %s/%s", ownerKind, ownerName))
+		}
+		annotations = inheritedAnnotations
+		patchB64 = annotations[consts.InstrumentPatchAnnotation]
+		podlog.Info("using inherited instrument patch for pod admission", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "inheritedFrom", inheritedFrom)
 	}
 	podlog.Info("found instrument patch annotation on owner", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "patchAnnotationBytesBase64", len(patchB64), "hasEnvNameHints", annotations[consts.InstrumentPatchEnvNamesAnnotation] != "")
 
@@ -236,6 +262,211 @@ func envNamePatchPathForPod(pod *corev1.Pod, hint envNamePatchHint) (string, boo
 		return "", false
 	}
 	return "", false
+}
+
+func (a *PodInstrument) inheritedPatchAnnotations(ctx context.Context, namespace string, kind string, name string) (map[string]string, string) {
+	rules, err := loadPodAdmissionNameRegexRules()
+	if err != nil {
+		podlog.Info("failed to load workload name regex rules for pod admission patch inheritance", "namespace", namespace, "kind", kind, "name", name, "err", err)
+		return nil, ""
+	}
+	if len(rules) == 0 {
+		podlog.Info("no workload name regex rules configured for pod admission patch inheritance", "namespace", namespace, "kind", kind, "name", name, "env", WorkloadNameRegexRulesEnv)
+		return nil, ""
+	}
+
+	rule, currentMatch, matchedRules := selectPodAdmissionRegexRule(rules, name, kind)
+	if rule == nil {
+		podlog.Info("workload did not match name regex rules during pod admission", "namespace", namespace, "kind", kind, "name", name, "rules", len(rules))
+		return nil, ""
+	}
+	if matchedRules > 1 {
+		podlog.Info("workload matched multiple name regex rules during pod admission, using the last matching rule", "namespace", namespace, "kind", kind, "name", name, "matchedRules", matchedRules)
+	}
+	podlog.Info("workload matched name regex rule during pod admission", "namespace", namespace, "kind", kind, "name", name, "regex", rule.regex.String(), "base", currentMatch.base, "version", currentMatch.version)
+
+	matches, err := a.listPodAdmissionRegexMatches(ctx, namespace, kind, rule, currentMatch.base)
+	if err != nil {
+		podlog.Info("failed to list workload name regex family during pod admission", "namespace", namespace, "kind", kind, "name", name, "base", currentMatch.base, "err", err)
+		return nil, ""
+	}
+
+	var selected *podAdmissionNameMatch
+	for i := range matches {
+		if matches[i].obj.GetName() == name || matches[i].version >= currentMatch.version {
+			continue
+		}
+		annotations := matches[i].obj.GetAnnotations()
+		if annotations == nil || annotations[consts.InstrumentPatchAnnotation] == "" {
+			continue
+		}
+		if selected == nil || matches[i].version > selected.version {
+			selected = &matches[i]
+		}
+	}
+	if selected == nil {
+		podlog.Info("no historical workload with instrument patch found during pod admission", "namespace", namespace, "kind", kind, "name", name, "base", currentMatch.base, "familySize", len(matches))
+		return nil, ""
+	}
+
+	podlog.Info("selected historical workload patch during pod admission", "namespace", namespace, "kind", kind, "name", name, "base", currentMatch.base, "sourceWorkload", selected.obj.GetName(), "sourceVersion", selected.version)
+	return selected.obj.GetAnnotations(), selected.obj.GetName()
+}
+
+func loadPodAdmissionNameRegexRules() ([]podAdmissionNameRegexRule, error) {
+	rawRules := strings.TrimSpace(os.Getenv(WorkloadNameRegexRulesEnv))
+	if rawRules == "" {
+		return nil, nil
+	}
+
+	var configs []workloadNameRegexRuleConfig
+	if err := json.Unmarshal([]byte(rawRules), &configs); err != nil {
+		return nil, err
+	}
+
+	rules := make([]podAdmissionNameRegexRule, 0, len(configs))
+	for _, cfg := range configs {
+		compiled, err := regexp.Compile(cfg.Regex)
+		if err != nil {
+			return nil, err
+		}
+		if !hasRegexGroup(compiled, "base") || !hasRegexGroup(compiled, "version") {
+			return nil, fmt.Errorf("workload name regex must include base and version named groups")
+		}
+		kinds := make(map[string]struct{}, len(cfg.Kinds))
+		for _, kind := range cfg.Kinds {
+			kinds[kind] = struct{}{}
+		}
+		rules = append(rules, podAdmissionNameRegexRule{
+			kinds: kinds,
+			regex: compiled,
+		})
+	}
+
+	return rules, nil
+}
+
+func selectPodAdmissionRegexRule(rules []podAdmissionNameRegexRule, name string, kind string) (*podAdmissionNameRegexRule, *podAdmissionNameMatch, int) {
+	var selectedRule *podAdmissionNameRegexRule
+	var selectedMatch *podAdmissionNameMatch
+	matches := 0
+	for i := range rules {
+		if !rules[i].matchesKind(kind) {
+			continue
+		}
+		match, ok := rules[i].matchName(name)
+		if !ok {
+			continue
+		}
+		matches++
+		selectedRule = &rules[i]
+		selectedMatch = match
+	}
+	return selectedRule, selectedMatch, matches
+}
+
+func (r podAdmissionNameRegexRule) matchesKind(kind string) bool {
+	if len(r.kinds) == 0 {
+		return true
+	}
+	_, ok := r.kinds[kind]
+	return ok
+}
+
+func (r podAdmissionNameRegexRule) matchName(name string) (*podAdmissionNameMatch, bool) {
+	matches := r.regex.FindStringSubmatch(name)
+	if matches == nil || matches[0] != name {
+		return nil, false
+	}
+	groupNames := r.regex.SubexpNames()
+
+	base := regexGroupValue(matches, groupNames, "base")
+	versionValue := regexGroupValue(matches, groupNames, "version")
+	if base == "" || versionValue == "" {
+		return nil, false
+	}
+	version, err := strconv.ParseInt(versionValue, 10, 64)
+	if err != nil {
+		return nil, false
+	}
+
+	return &podAdmissionNameMatch{
+		base:    base,
+		version: version,
+	}, true
+}
+
+func hasRegexGroup(regex *regexp.Regexp, name string) bool {
+	for _, groupName := range regex.SubexpNames() {
+		if groupName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func regexGroupValue(matches []string, groupNames []string, name string) string {
+	for i, groupName := range groupNames {
+		if groupName == name && i < len(matches) {
+			return matches[i]
+		}
+	}
+	return ""
+}
+
+func (a *PodInstrument) listPodAdmissionRegexMatches(ctx context.Context, namespace string, kind string, rule *podAdmissionNameRegexRule, base string) ([]podAdmissionNameMatch, error) {
+	objs, err := a.listWorkloadsByKind(ctx, namespace, kind)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]podAdmissionNameMatch, 0)
+	for _, obj := range objs {
+		match, ok := rule.matchName(obj.GetName())
+		if !ok || match.base != base {
+			continue
+		}
+		match.obj = obj
+		results = append(results, *match)
+	}
+	return results, nil
+}
+
+func (a *PodInstrument) listWorkloadsByKind(ctx context.Context, namespace string, kind string) ([]client.Object, error) {
+	switch kind {
+	case "Deployment":
+		var list appsv1.DeploymentList
+		if err := a.Client.List(ctx, &list, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
+		objs := make([]client.Object, 0, len(list.Items))
+		for i := range list.Items {
+			objs = append(objs, &list.Items[i])
+		}
+		return objs, nil
+	case "StatefulSet":
+		var list appsv1.StatefulSetList
+		if err := a.Client.List(ctx, &list, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
+		objs := make([]client.Object, 0, len(list.Items))
+		for i := range list.Items {
+			objs = append(objs, &list.Items[i])
+		}
+		return objs, nil
+	case "DaemonSet":
+		var list appsv1.DaemonSetList
+		if err := a.Client.List(ctx, &list, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
+		objs := make([]client.Object, 0, len(list.Items))
+		for i := range list.Items {
+			objs = append(objs, &list.Items[i])
+		}
+		return objs, nil
+	default:
+		return nil, fmt.Errorf("unsupported workload kind: %s", kind)
+	}
 }
 
 func getOwnerObjFromKind(kind string) (client.Object, error) {

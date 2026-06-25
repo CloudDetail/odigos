@@ -73,3 +73,35 @@ func TestResolveEnvNamePatchPathsSkipsMissingEnv(t *testing.T) {
 		t.Fatalf("expected missing env patch to be skipped, got %d patches", len(resolved))
 	}
 }
+
+func TestLoadPodAdmissionNameRegexRulesFromEnv(t *testing.T) {
+	t.Setenv(WorkloadNameRegexRulesEnv, `[{"kinds":["Deployment"],"regex":"^(?P<base>.+)-v(?P<version>[0-9]+)$"}]`)
+
+	rules, err := loadPodAdmissionNameRegexRules()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected one rule, got %d", len(rules))
+	}
+
+	match, ok := rules[0].matchName("checkout-v2")
+	if !ok {
+		t.Fatalf("expected workload name to match")
+	}
+	if match.base != "checkout" || match.version != 2 {
+		t.Fatalf("unexpected match: %+v", match)
+	}
+}
+
+func TestLoadPodAdmissionNameRegexRulesDisabledWithoutEnv(t *testing.T) {
+	t.Setenv(WorkloadNameRegexRulesEnv, "")
+
+	rules, err := loadPodAdmissionNameRegexRules()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected no rules without env config, got %d", len(rules))
+	}
+}
