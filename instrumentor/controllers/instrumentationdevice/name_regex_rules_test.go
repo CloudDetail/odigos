@@ -2,6 +2,7 @@ package instrumentationdevice_test
 
 import (
 	"context"
+	"os"
 
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	"github.com/odigos-io/odigos/common"
@@ -10,9 +11,7 @@ import (
 	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -26,25 +25,15 @@ var _ = Describe("workload name regex rules", func() {
 	})
 
 	It("creates a concrete InstrumentedApplication for the latest matching workload from the newest historical version", func() {
-		instrumentor := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "odigos-instrumentor",
-				Namespace: consts.DefaultOdigosNamespace,
-				Annotations: map[string]string{
-					consts.WorkloadNameRegexRulesAnnotation: `[{"kinds":["Deployment"],"regex":"^(?P<base>.+)-[vV](?P<version>[0-9]+)$"}]`,
-				},
-			},
-			Spec: appsv1.DeploymentSpec{
-				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "odigos-instrumentor"}},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "odigos-instrumentor"}},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "manager", Image: "test"}},
-					},
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, instrumentor)).Should(Succeed())
+		previousRules, hadPreviousRules := os.LookupEnv(consts.WorkloadNameRegexRulesEnv)
+		Expect(os.Setenv(consts.WorkloadNameRegexRulesEnv, `[{"kinds":["Deployment"],"regex":"^(?P<base>.+)-[vV](?P<version>[0-9]+)$"}]`)).Should(Succeed())
+		defer func() {
+			if hadPreviousRules {
+				Expect(os.Setenv(consts.WorkloadNameRegexRulesEnv, previousRules)).Should(Succeed())
+			} else {
+				Expect(os.Unsetenv(consts.WorkloadNameRegexRulesEnv)).Should(Succeed())
+			}
+		}()
 
 		v1 := testutil.SetOdigosInstrumentationEnabled(testutil.NewMockTestDeployment(namespace))
 		v1.Name = "checkout-v1"

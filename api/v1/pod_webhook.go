@@ -41,7 +41,6 @@ import (
 var podlog = logf.Log.WithName("patch-pod")
 
 const InstrumentPatchUseIndexEnv = "ORIGINX_INSTRUMENT_PATCH_USE_INDEX"
-const WorkloadNameRegexRulesEnv = "ODIGOS_WORKLOAD_NAME_REGEX_RULES"
 
 type envNamePatchHint struct {
 	ContainerName string `json:"containerName"`
@@ -116,13 +115,18 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	}
 
 	annotations, labels := getAnnotationsAndLabelsFromObj(ownerObj)
-	if annotations == nil || labels == nil {
-		podlog.Info("skip pod instrumentation because owner annotations or labels are empty", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "hasAnnotations", annotations != nil, "hasLabels", labels != nil)
-		return admission.Allowed(fmt.Sprintf("no instrument annotations: %s/%s", ownerKind, ownerName))
+	if annotations == nil {
+		podlog.Info("owner annotations are empty, continuing with regex patch inheritance fallback", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName)
+		annotations = map[string]string{}
+	}
+	if labels == nil {
+		podlog.Info("owner labels are empty, continuing with namespace or inherited patch authorization", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName)
+		labels = map[string]string{}
 	}
 
 	// 检查工作负载上的patch
 	patchB64, find := annotations[consts.InstrumentPatchAnnotation]
+	inheritedPatch := false
 	if !find || len(patchB64) <= 0 {
 		podlog.Info("owner has no instrument patch annotation, trying name regex patch inheritance", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "annotation", consts.InstrumentPatchAnnotation)
 		inheritedAnnotations, inheritedFrom := a.inheritedPatchAnnotations(ctx, namespace, ownerKind, ownerName)
@@ -132,6 +136,7 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 		}
 		annotations = inheritedAnnotations
 		patchB64 = annotations[consts.InstrumentPatchAnnotation]
+		inheritedPatch = true
 		podlog.Info("using inherited instrument patch for pod admission", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "inheritedFrom", inheritedFrom)
 	}
 	podlog.Info("found instrument patch annotation on owner", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "patchAnnotationBytesBase64", len(patchB64), "hasEnvNameHints", annotations[consts.InstrumentPatchEnvNamesAnnotation] != "")
@@ -139,21 +144,25 @@ func (a *PodInstrument) Handle(ctx context.Context, req admission.Request) admis
 	// 检查工作负载上的标签
 	mark, find := labels[consts.OdigosInstrumentationLabel]
 	if !find {
-		// 再检查namespace上的标签
-		namespaceObj := &corev1.Namespace{}
-		err = a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: namespace}, namespaceObj)
-		if err != nil {
-			podlog.Info("skip pod instrumentation because namespace object cannot be loaded", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "err", err)
-			return admission.Allowed(fmt.Sprintf("can not find namespace: %s ", namespace))
-		}
+		if inheritedPatch {
+			podlog.Info("allowing pod instrumentation without workload label because patch was inherited by regex", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName)
+		} else {
+			// 再检查namespace上的标签
+			namespaceObj := &corev1.Namespace{}
+			err = a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: namespace}, namespaceObj)
+			if err != nil {
+				podlog.Info("skip pod instrumentation because namespace object cannot be loaded", "namespace", namespace, "pod", req.Name, "workloadKind", ownerKind, "workload", ownerName, "err", err)
+				return admission.Allowed(fmt.Sprintf("can not find namespace: %s ", namespace))
+			}
 
-		mark, find := namespaceObj.GetAnnotations()[consts.OdigosInstrumentationLabel]
-		if !find || mark != consts.InstrumentationEnabled {
-			podlog.Info(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
-			return admission.Allowed(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
-		} else if mark == consts.InstrumentationDisabled {
-			podlog.Info(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
-			return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
+			mark, find := namespaceObj.GetAnnotations()[consts.OdigosInstrumentationLabel]
+			if !find || mark != consts.InstrumentationEnabled {
+				podlog.Info(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
+				return admission.Allowed(fmt.Sprintf("instrument is not enabled for namespace: %s or workload: %s", namespace, ownerName))
+			} else if mark == consts.InstrumentationDisabled {
+				podlog.Info(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
+				return admission.Allowed(fmt.Sprintf("instrument has been disabled for namespace: %s", namespace))
+			}
 		}
 	} else if mark == consts.InstrumentationDisabled {
 		podlog.Info("instrument has been disabled for workload", "workloadKind", ownerKind, "workload", ownerName)
@@ -271,7 +280,7 @@ func (a *PodInstrument) inheritedPatchAnnotations(ctx context.Context, namespace
 		return nil, ""
 	}
 	if len(rules) == 0 {
-		podlog.Info("no workload name regex rules configured for pod admission patch inheritance", "namespace", namespace, "kind", kind, "name", name, "env", WorkloadNameRegexRulesEnv)
+		podlog.Info("no workload name regex rules configured for pod admission patch inheritance", "namespace", namespace, "kind", kind, "name", name, "env", consts.WorkloadNameRegexRulesEnv)
 		return nil, ""
 	}
 
@@ -314,7 +323,7 @@ func (a *PodInstrument) inheritedPatchAnnotations(ctx context.Context, namespace
 }
 
 func loadPodAdmissionNameRegexRules() ([]podAdmissionNameRegexRule, error) {
-	rawRules := strings.TrimSpace(os.Getenv(WorkloadNameRegexRulesEnv))
+	rawRules := strings.TrimSpace(os.Getenv(consts.WorkloadNameRegexRulesEnv))
 	if rawRules == "" {
 		return nil, nil
 	}

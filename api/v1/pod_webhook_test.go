@@ -3,6 +3,7 @@ package v1
 import (
 	"testing"
 
+	"github.com/odigos-io/odigos/common/consts"
 	"gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -75,7 +76,7 @@ func TestResolveEnvNamePatchPathsSkipsMissingEnv(t *testing.T) {
 }
 
 func TestLoadPodAdmissionNameRegexRulesFromEnv(t *testing.T) {
-	t.Setenv(WorkloadNameRegexRulesEnv, `[{"kinds":["Deployment"],"regex":"^(?P<base>.+)-v(?P<version>[0-9]+)$"}]`)
+	t.Setenv(consts.WorkloadNameRegexRulesEnv, `[{"kinds":["Deployment"],"regex":"^(?P<base>.+)-v(?P<version>[0-9]+)$"}]`)
 
 	rules, err := loadPodAdmissionNameRegexRules()
 	if err != nil {
@@ -95,7 +96,7 @@ func TestLoadPodAdmissionNameRegexRulesFromEnv(t *testing.T) {
 }
 
 func TestLoadPodAdmissionNameRegexRulesDisabledWithoutEnv(t *testing.T) {
-	t.Setenv(WorkloadNameRegexRulesEnv, "")
+	t.Setenv(consts.WorkloadNameRegexRulesEnv, "")
 
 	rules, err := loadPodAdmissionNameRegexRules()
 	if err != nil {

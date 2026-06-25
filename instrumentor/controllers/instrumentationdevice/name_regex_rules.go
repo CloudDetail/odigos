@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	"github.com/odigos-io/odigos/common/consts"
-	"github.com/odigos-io/odigos/k8sutils/pkg/env"
 	"github.com/odigos-io/odigos/k8sutils/pkg/workload"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,8 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-const instrumentorDeploymentName = "odigos-instrumentor"
 
 type workloadNameRegexRuleConfig struct {
 	Kinds []string `json:"kinds,omitempty"`
@@ -50,7 +48,7 @@ func reconcileInstrumentedApplicationByNameRegex(ctx context.Context, k8sClient 
 		return nil
 	}
 	if len(rules) == 0 {
-		logger.Info("no workload name regex rules configured", "namespace", namespace, "kind", workloadKind, "name", workloadName, "annotation", consts.WorkloadNameRegexRulesAnnotation)
+		logger.Info("no workload name regex rules configured", "namespace", namespace, "kind", workloadKind, "name", workloadName, "env", consts.WorkloadNameRegexRulesEnv)
 		return nil
 	}
 	logger.Info("loaded workload name regex rules", "namespace", namespace, "kind", workloadKind, "name", workloadName, "rules", len(rules))
@@ -132,16 +130,7 @@ func reconcileInstrumentedApplicationByNameRegex(ctx context.Context, k8sClient 
 }
 
 func loadWorkloadNameRegexRules(ctx context.Context, k8sClient client.Client) ([]workloadNameRegexRule, error) {
-	var instrumentor appsv1.Deployment
-	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: env.GetCurrentNamespace(), Name: instrumentorDeploymentName}, &instrumentor); err != nil {
-		return nil, client.IgnoreNotFound(err)
-	}
-
-	annotations := instrumentor.GetAnnotations()
-	if annotations == nil {
-		return nil, nil
-	}
-	rawRules := strings.TrimSpace(annotations[consts.WorkloadNameRegexRulesAnnotation])
+	rawRules := strings.TrimSpace(os.Getenv(consts.WorkloadNameRegexRulesEnv))
 	if rawRules == "" {
 		return nil, nil
 	}

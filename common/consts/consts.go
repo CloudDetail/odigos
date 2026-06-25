@@ -18,6 +18,7 @@ const (
 	InstrumentPatchEnvNamesAnnotation = "originx-instrument-patch-env-names"
 	InstrumentPatchUseIndexAnnotation = "originx-instrument-patch-use-index"
 	WorkloadNameRegexRulesAnnotation  = "odigos.io/workload-name-regex-rules"
+	WorkloadNameRegexRulesEnv         = "ODIGOS_WORKLOAD_NAME_REGEX_RULES"
 	OdigosReportedNameAnnotation      = "odigos.io/reported-name"
 	EbpfInstrumentationAnnotation     = "instrumentation.odigos.io/ebpf" // deprecated.
 
