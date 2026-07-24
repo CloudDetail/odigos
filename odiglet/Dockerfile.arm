@@ -108,14 +108,4 @@ WORKDIR /instrumentations/
 COPY --from=builder /instrumentations/ .
 COPY --from=builder /opt/ini-merger /usr/bin/ini-merger
 COPY --from=preload /etc/apo /etc/apo
-
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "arm64" ]; then DOTNET_ARCH=arm64; else DOTNET_ARCH=x64; fi \
-    && sed -i \
-        -e '/^OTEL_DOTNET_AUTO_HOME =/d' \
-        -e '/^OTEL_EXPORTER_OTLP_PROTOCOL =/d' \
-        -e "s|^CORECLR_PROFILER_PATH =.*|CORECLR_PROFILER_PATH = /etc/apo/instrumentations/dotnet/linux-${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so|" \
-        -e '/^\[dotnet\]$/a OTEL_DOTNET_AUTO_HOME = /etc/apo/instrumentations/dotnet' \
-        -e '/^OTEL_EXPORTER_OTLP_ENDPOINT =/a OTEL_EXPORTER_OTLP_PROTOCOL = http/protobuf' \
-        /etc/apo/instrument/libapoinstrument.conf
 CMD ["/root/odiglet"]
