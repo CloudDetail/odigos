@@ -1,6 +1,24 @@
 FROM --platform=$TARGETPLATFORM apache/skywalking-java-agent:9.3.0-alpine as sw_agent
 FROM --platform=$TARGETPLATFORM registry.cn-hangzhou.aliyuncs.com/kindlingx/autoinstrumentation-python:0.48b0 as python_agent
 
+FROM --platform=$BUILDPLATFORM busybox:1.36.1 AS dotnet_agent_amd64
+ARG DOTNET_OTEL_VERSION=v1.7.0
+ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${DOTNET_OTEL_VERSION}/opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip /tmp/dotnet-agent.zip
+RUN mkdir -p /dotnet-instrumentation \
+    && unzip /tmp/dotnet-agent.zip -d /dotnet-instrumentation \
+    && cp /dotnet-instrumentation/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so \
+        /dotnet-instrumentation/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so
+
+FROM --platform=$BUILDPLATFORM busybox:1.36.1 AS dotnet_agent_arm64
+ARG DOTNET_OTEL_VERSION=v1.7.0
+ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${DOTNET_OTEL_VERSION}/opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip /tmp/dotnet-agent.zip
+RUN mkdir -p /dotnet-instrumentation \
+    && unzip /tmp/dotnet-agent.zip -d /dotnet-instrumentation \
+    && cp /dotnet-instrumentation/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so \
+        /dotnet-instrumentation/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so
+
+FROM dotnet_agent_${TARGETARCH} AS dotnet_agent
+
 FROM --platform=$TARGETPLATFORM centos:centos7.9.2009 as preload
 ARG TARGETPLATFORM
 
@@ -77,7 +95,10 @@ COPY  nodejs-instrumentation/workspace/node_modules/ /instrumentations/nodejs/no
 COPY  nodejs-instrumentation/src /instrumentations/nodejs
 
 # .NET
-COPY  ./tracer-home /instrumentations/dotnet
+# Keep the existing tracer-home assets and overlay the official
+# architecture-specific OpenTelemetry .NET auto-instrumentation files.
+COPY ./tracer-home /instrumentations/dotnet
+COPY --from=dotnet_agent /dotnet-instrumentation/ /instrumentations/dotnet/
 
 RUN chmod -R +x /instrumentations
 
@@ -96,5 +117,15 @@ COPY --from=builder /instrumentations/ .
 COPY --from=builder /opt/ini-merger /usr/bin/ini-merger
 COPY --from=preload /etc/apo /etc/apo
 COPY --from=preload_musl /etc/apo/instrument/libapoinstrument_musl.so /etc/apo/instrument/libapoinstrument_musl.so
+
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "arm64" ]; then DOTNET_ARCH=arm64; else DOTNET_ARCH=x64; fi \
+    && sed -i \
+        -e '/^OTEL_DOTNET_AUTO_HOME =/d' \
+        -e '/^OTEL_EXPORTER_OTLP_PROTOCOL =/d' \
+        -e "s|^CORECLR_PROFILER_PATH =.*|CORECLR_PROFILER_PATH = /etc/apo/instrumentations/dotnet/linux-${DOTNET_ARCH}/OpenTelemetry.AutoInstrumentation.Native.so|" \
+        -e '/^\[dotnet\]$/a OTEL_DOTNET_AUTO_HOME = /etc/apo/instrumentations/dotnet' \
+        -e '/^OTEL_EXPORTER_OTLP_ENDPOINT =/a OTEL_EXPORTER_OTLP_PROTOCOL = http/protobuf' \
+        /etc/apo/instrument/libapoinstrument.conf
 
 CMD ["/root/odiglet"]

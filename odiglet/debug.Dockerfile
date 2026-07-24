@@ -8,11 +8,21 @@ WORKDIR /nodejs-instrumentation
 COPY odiglet/agents/nodejs .
 RUN npm install
 
-FROM busybox AS dotnet-builder
+FROM --platform=$BUILDPLATFORM busybox:1.36.1 AS dotnet-builder-amd64
 WORKDIR /dotnet-instrumentation
-ARG DOTNET_OTEL_VERSION=v0.7.0
-ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/$DOTNET_OTEL_VERSION/opentelemetry-dotnet-instrumentation-linux-musl.zip .
-RUN unzip opentelemetry-dotnet-instrumentation-linux-musl.zip && rm opentelemetry-dotnet-instrumentation-linux-musl.zip
+ARG DOTNET_OTEL_VERSION=v1.7.0
+ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${DOTNET_OTEL_VERSION}/opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip /tmp/dotnet-agent.zip
+RUN unzip /tmp/dotnet-agent.zip \
+    && cp linux-x64/OpenTelemetry.AutoInstrumentation.Native.so OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so
+
+FROM --platform=$BUILDPLATFORM busybox:1.36.1 AS dotnet-builder-arm64
+WORKDIR /dotnet-instrumentation
+ARG DOTNET_OTEL_VERSION=v1.7.0
+ADD https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${DOTNET_OTEL_VERSION}/opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip /tmp/dotnet-agent.zip
+RUN unzip /tmp/dotnet-agent.zip \
+    && cp linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so
+
+FROM dotnet-builder-${TARGETARCH} AS dotnet-builder
 
 FROM --platform=$BUILDPLATFORM keyval/odiglet-base:v1.4 as builder
 WORKDIR /go/src/github.com/odigos-io/odigos
