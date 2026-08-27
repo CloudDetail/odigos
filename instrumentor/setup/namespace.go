@@ -6,7 +6,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
 	"github.com/odigos-io/odigos/k8sutils/pkg/env"
-	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +25,7 @@ type NamespaceInstrumentRule struct {
 	checkedNamespace []string
 }
 
-func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Client) ([]string, error) {
+func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Client, cfg ConfigReader) ([]string, error) {
 	// List all namespaces in the cluster using the client
 	namespaceList := &corev1.NamespaceList{}
 	err := c.List(context.Background(), namespaceList)
@@ -37,6 +36,9 @@ func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Cli
 	var nsList []string
 	// TODO deal with error
 	for _, ns := range namespaceList.Items {
+		if !cfg.InjectionAllowed() {
+			return nsList, nil
+		}
 		if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
 			// 永远不操作kube-system下面的资源
 			continue
@@ -53,7 +55,7 @@ func (r *NamespaceInstrumentRule) InstrumentAll(logger logr.Logger, c client.Cli
 	return nsList, nil
 }
 
-func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, cfg *viper.Viper, defaultEnable bool) ([]string, error) {
+func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, cfg ConfigReader, defaultEnable bool) ([]string, error) {
 	r.nsCfg = cfg.GetStringMap("namespace")
 
 	// List all namespaces in the cluster using the client
@@ -65,6 +67,9 @@ func (r *NamespaceInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client
 
 	var nsList []string
 	for _, ns := range namespaceList.Items {
+		if !cfg.InjectionAllowed() {
+			return nsList, nil
+		}
 		if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
 			// 永远不操作kube-system下面的资源
 			continue
@@ -103,6 +108,10 @@ func checkIfEnabled(find bool, op any, def bool) bool {
 	case "enabledFuture":
 		// 对Namespace来说,只有enabledFuture才设置instrument为true; 表示后续新增的工作负载全部注入
 		return true
+	case "enabled", "enable":
+		// Existing workloads are handled by workload rules, but the namespace
+		// label must stay disabled so newly created workloads are not injected.
+		return false
 	case "disabled", "disable":
 		return false
 	default:

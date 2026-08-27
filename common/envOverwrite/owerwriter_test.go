@@ -223,3 +223,33 @@ func TestDefaultServiceName(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoteServiceNamePolicyKeepsInstrumentorEnvironmentNames(t *testing.T) {
+	t.Setenv(ServiceNameEnvNamesEnv, "LOCAL_SERVICE")
+	t.Setenv(ServiceNameDefaultFormatEnv, "local-${containerName}")
+	SetServiceNamePolicy(&ServiceNamePolicy{
+		DefaultFormat: "${app}.${containerName}",
+		Variables: []ServiceNameVariable{{
+			Name: "app", Source: "workloadName", Regex: "^checkout$", Replacement: "billing",
+		}},
+	})
+	t.Cleanup(func() { SetServiceNamePolicy(nil) })
+
+	envNames, ok := ServiceNameEnv(common.OtelSdkNativeCommunity)
+	assert.True(t, ok)
+	assert.Contains(t, envNames, "OTEL_SERVICE_NAME")
+	assert.Contains(t, envNames, "LOCAL_SERVICE")
+	assert.Equal(t, "billing.api", DefaultServiceName("checkout", "api"))
+}
+
+func TestRegexServiceNameMappingHasHighestPriority(t *testing.T) {
+	SetServiceNamePolicy(&ServiceNamePolicy{
+		DefaultFormat: "formatted-${workloadName}",
+		Mappings: []ServiceNameMapping{{
+			NamespacePattern: "^prod$", WorkloadPattern: "^checkout-.*$", ServiceName: "checkout",
+		}},
+	})
+	t.Cleanup(func() { SetServiceNamePolicy(nil) })
+	assert.Equal(t, "checkout", ServiceName("prod", "checkout-api", "api"))
+	assert.Equal(t, "formatted-checkout-api", ServiceName("staging", "checkout-api", "api"))
+}

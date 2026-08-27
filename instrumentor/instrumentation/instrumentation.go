@@ -155,6 +155,13 @@ func patchEnvVarsForContainer(logger logr.Logger, runtimeDetails *odigosv1.Instr
 	serviceEnvNames, serviceEnvNamesFound := envOverwrite.ServiceNameEnv(sdk)
 	serviceEnvNameSet := envNameSet(serviceEnvNames)
 	userDefinedServiceName, userDefinedServiceNameFound, serviceNameSource := findUserDefinedServiceName(runtimeDetails, container, serviceEnvNames)
+	if workloadName, _, err := workload.GetWorkloadInfoRuntimeName(runtimeDetails.Name); err == nil {
+		if mappedServiceName, found := envOverwrite.MappedServiceName(runtimeDetails.Namespace, workloadName); found {
+			userDefinedServiceName = mappedServiceName
+			userDefinedServiceNameFound = true
+			serviceNameSource = "remoteMapping"
+		}
+	}
 
 	// Step 1: check existing environment on the manifest and update them if needed
 	newEnvs := make([]corev1.EnvVar, 0, len(container.Env))
@@ -250,7 +257,7 @@ func autoDiscoverServiceName(runtimeDetails *odigosv1.InstrumentedApplication, c
 		if err != nil {
 			return nil, "", false
 		}
-		serviceNameValue = envOverwrite.DefaultServiceName(name, container.Name)
+		serviceNameValue = envOverwrite.ServiceName(runtimeDetails.Namespace, name, container.Name)
 	}
 
 	manifestEnvNames := make(map[string]string, len(container.Env))

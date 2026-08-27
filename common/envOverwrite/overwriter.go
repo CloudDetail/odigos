@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/odigos-io/odigos/common"
 )
@@ -14,6 +15,55 @@ const serviceNameVarPrefix = "ODIGOS_SERVICE_NAME_VAR_"
 const serviceNameVarSourceSuffix = "_SOURCE"
 const serviceNameVarRegexSuffix = "_REGEX"
 const serviceNameVarReplacementSuffix = "_REPLACEMENT"
+
+type ServiceNamePolicy struct {
+	DefaultFormat string
+	Variables     []ServiceNameVariable
+	Mappings      []ServiceNameMapping
+}
+
+type ServiceNameMapping struct {
+	NamespacePattern string
+	WorkloadPattern  string
+	ServiceName      string
+}
+
+type ServiceNameVariable struct {
+	Name        string
+	Source      string
+	Regex       string
+	Replacement string
+}
+
+var serviceNamePolicyState struct {
+	sync.RWMutex
+	policy *ServiceNamePolicy
+}
+
+func SetServiceNamePolicy(policy *ServiceNamePolicy) {
+	serviceNamePolicyState.Lock()
+	defer serviceNamePolicyState.Unlock()
+	if policy == nil {
+		serviceNamePolicyState.policy = nil
+		return
+	}
+	copy := *policy
+	copy.Variables = append([]ServiceNameVariable(nil), policy.Variables...)
+	copy.Mappings = append([]ServiceNameMapping(nil), policy.Mappings...)
+	serviceNamePolicyState.policy = &copy
+}
+
+func currentServiceNamePolicy() (*ServiceNamePolicy, bool) {
+	serviceNamePolicyState.RLock()
+	defer serviceNamePolicyState.RUnlock()
+	if serviceNamePolicyState.policy == nil {
+		return nil, false
+	}
+	copy := *serviceNamePolicyState.policy
+	copy.Variables = append([]ServiceNameVariable(nil), serviceNamePolicyState.policy.Variables...)
+	copy.Mappings = append([]ServiceNameMapping(nil), serviceNamePolicyState.policy.Mappings...)
+	return &copy, true
+}
 
 type envValues struct {
 	delim  string
@@ -177,16 +227,27 @@ func appendServiceNameEnvNamesFromEnv(envNames []string) []string {
 }
 
 func DefaultServiceName(deployName string, containerName string) string {
-	defaultName := defaultServiceName(deployName, containerName)
+	return ServiceName("", deployName, containerName)
+}
+
+func ServiceName(namespace string, workloadName string, containerName string) string {
+	if mapped, found := MappedServiceName(namespace, workloadName); found {
+		return mapped
+	}
+	defaultName := defaultServiceName(workloadName, containerName)
 	format, formatFound := os.LookupEnv(ServiceNameDefaultFormatEnv)
+	if policy, remote := currentServiceNamePolicy(); remote {
+		format = policy.DefaultFormat
+		formatFound = true
+	}
 	if !formatFound || format == "" {
 		return defaultName
 	}
 
 	variables := map[string]string{
-		"workloadName":  deployName,
-		"workflowName":  deployName,
-		"deployName":    deployName,
+		"workloadName":  workloadName,
+		"workflowName":  workloadName,
+		"deployName":    workloadName,
 		"containerName": containerName,
 	}
 	addServiceNameDerivedVariables(variables)
@@ -197,6 +258,21 @@ func DefaultServiceName(deployName string, containerName string) string {
 	}
 
 	return rendered
+}
+
+func MappedServiceName(namespace string, workloadName string) (string, bool) {
+	policy, remote := currentServiceNamePolicy()
+	if !remote {
+		return "", false
+	}
+	for _, mapping := range policy.Mappings {
+		namespaceRegex, namespaceErr := regexp.Compile(mapping.NamespacePattern)
+		workloadRegex, workloadErr := regexp.Compile(mapping.WorkloadPattern)
+		if namespaceErr == nil && workloadErr == nil && namespaceRegex.MatchString(namespace) && workloadRegex.MatchString(workloadName) {
+			return mapping.ServiceName, true
+		}
+	}
+	return "", false
 }
 
 func defaultServiceName(deployName string, containerName string) string {
@@ -243,6 +319,14 @@ func addServiceNameDerivedVariables(variables map[string]string) {
 
 func serviceNameDerivedVariablesFromEnv() map[string]serviceNameDerivedVariable {
 	derivedVariables := make(map[string]serviceNameDerivedVariable)
+	if policy, remote := currentServiceNamePolicy(); remote {
+		for _, variable := range policy.Variables {
+			derivedVariables[variable.Name] = serviceNameDerivedVariable{
+				source: variable.Source, regex: variable.Regex, replacement: variable.Replacement,
+			}
+		}
+		return derivedVariables
+	}
 	for _, envEntry := range os.Environ() {
 		key, value, found := strings.Cut(envEntry, "=")
 		if !found || !strings.HasPrefix(key, serviceNameVarPrefix) {

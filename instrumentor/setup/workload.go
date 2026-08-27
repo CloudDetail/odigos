@@ -7,7 +7,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
 	"github.com/odigos-io/odigos/k8sutils/pkg/env"
-	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,13 +29,16 @@ import (
 type WorkloadInstrumentRule struct {
 }
 
-func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Client, namespace string) error {
+func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Client, namespace string, cfg ConfigReader) error {
 	statefulset := &appsv1.StatefulSetList{}
 	if err := c.List(context.Background(), statefulset, client.InNamespace(namespace)); err != nil {
 		return err
 	}
 
 	for _, statefulset := range statefulset.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		patch := getJsonMergePatchForInstrumentationLabel(true)
 		logger.Info("instrument statefulset", "namespace", statefulset.Namespace, "name", statefulset.Name)
 		if err := c.Patch(context.Background(), &statefulset, client.RawPatch(types.MergePatchType, patch)); err != nil {
@@ -50,6 +52,9 @@ func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Clie
 	}
 
 	for _, deployment := range deployments.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		patch := getJsonMergePatchForInstrumentationLabel(true)
 		logger.Info("instrument deployment", "namespace", deployment.Namespace, "name", deployment.Name)
 		if err := c.Patch(context.Background(), &deployment, client.RawPatch(types.MergePatchType, patch)); err != nil {
@@ -63,6 +68,9 @@ func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Clie
 	}
 
 	for _, daemonset := range daemonsets.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		patch := getJsonMergePatchForInstrumentationLabel(true)
 		logger.Info("instrument daemonset", "namespace", daemonset.Namespace, "name", daemonset.Name)
 		if err := c.Patch(context.Background(), &daemonset, client.RawPatch(types.MergePatchType, patch)); err != nil {
@@ -73,7 +81,7 @@ func (r *WorkloadInstrumentRule) InstrumentAll(logger logr.Logger, c client.Clie
 	return nil
 }
 
-func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, namespace string, cfg *viper.Viper, defaultEnable bool) error {
+func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.Client, namespace string, cfg ConfigReader, defaultEnable bool) error {
 	if namespace == "kube-system" || namespace == env.GetCurrentNamespace() {
 		// 永远不操作kube-system下面的资源
 		return nil
@@ -111,6 +119,9 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, statefulset := range statefulset.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		op, find := namespacedCfg[getWorkloadKeyFromObject(&statefulset)]
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {
@@ -137,6 +148,9 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, deployment := range deployments.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		op, find := namespacedCfg[getWorkloadKeyFromObject(&deployment)]
 		if find {
 			logger.Info("find deployment config", "namespace", deployment.Namespace, "name", deployment.Name)
@@ -167,6 +181,9 @@ func (r *WorkloadInstrumentRule) InstrumentWithCfg(logger logr.Logger, c client.
 	}
 
 	for _, daemonset := range daemonsets.Items {
+		if !cfg.InjectionAllowed() {
+			return nil
+		}
 		op, find := namespacedCfg[getWorkloadKeyFromObject(&daemonset)]
 		isEnabled := checkIsWorkloadEnabled(find, op, defaultEnable)
 		if !isEnabled {

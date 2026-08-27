@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/odigos-io/odigos/common/consts"
 	"github.com/odigos-io/odigos/k8sutils/pkg/env"
-	"github.com/spf13/viper"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
@@ -21,7 +22,7 @@ import (
 
 // 读取启动配置,对现有的注入项进行设置
 type SetupManager struct {
-	Cfg    *viper.Viper
+	Cfg    ConfigReader
 	client client.WithWatch
 	logger logr.Logger
 
@@ -34,7 +35,81 @@ type SetupManager struct {
 	mutex sync.Mutex
 }
 
-func NewSetupManager(logger logr.Logger, cfg *viper.Viper, client client.WithWatch) *SetupManager {
+type WorkloadInventory struct {
+	Namespaces []string      `json:"namespaces"`
+	Workloads  []WorkloadRef `json:"workloads"`
+}
+
+type WorkloadRef struct {
+	Namespace string `json:"namespace"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+}
+
+func (m *SetupManager) WorkloadInventory(ctx context.Context) (*WorkloadInventory, error) {
+	inventory := &WorkloadInventory{}
+	namespaces := &corev1.NamespaceList{}
+	if err := m.client.List(ctx, namespaces); err != nil {
+		return nil, err
+	}
+	for _, namespace := range namespaces.Items {
+		if namespace.Name == "kube-system" || namespace.Name == env.GetCurrentNamespace() {
+			continue
+		}
+		inventory.Namespaces = append(inventory.Namespaces, namespace.Name)
+	}
+	appendWorkloads := func(kind string, objects []client.Object) {
+		for _, object := range objects {
+			if object.GetNamespace() == "kube-system" || object.GetNamespace() == env.GetCurrentNamespace() {
+				continue
+			}
+			inventory.Workloads = append(inventory.Workloads, WorkloadRef{
+				Namespace: object.GetNamespace(), Kind: kind, Name: object.GetName(),
+			})
+		}
+	}
+	deployments := &appsv1.DeploymentList{}
+	if err := m.client.List(ctx, deployments); err != nil {
+		return nil, err
+	}
+	deploymentObjects := make([]client.Object, 0, len(deployments.Items))
+	for i := range deployments.Items {
+		deploymentObjects = append(deploymentObjects, &deployments.Items[i])
+	}
+	appendWorkloads("deployment", deploymentObjects)
+	statefulsets := &appsv1.StatefulSetList{}
+	if err := m.client.List(ctx, statefulsets); err != nil {
+		return nil, err
+	}
+	statefulsetObjects := make([]client.Object, 0, len(statefulsets.Items))
+	for i := range statefulsets.Items {
+		statefulsetObjects = append(statefulsetObjects, &statefulsets.Items[i])
+	}
+	appendWorkloads("statefulset", statefulsetObjects)
+	daemonsets := &appsv1.DaemonSetList{}
+	if err := m.client.List(ctx, daemonsets); err != nil {
+		return nil, err
+	}
+	daemonsetObjects := make([]client.Object, 0, len(daemonsets.Items))
+	for i := range daemonsets.Items {
+		daemonsetObjects = append(daemonsetObjects, &daemonsets.Items[i])
+	}
+	appendWorkloads("daemonset", daemonsetObjects)
+	sort.Strings(inventory.Namespaces)
+	sort.Slice(inventory.Workloads, func(i, j int) bool {
+		left, right := inventory.Workloads[i], inventory.Workloads[j]
+		if left.Namespace != right.Namespace {
+			return left.Namespace < right.Namespace
+		}
+		if left.Kind != right.Kind {
+			return left.Kind < right.Kind
+		}
+		return left.Name < right.Name
+	})
+	return inventory, nil
+}
+
+func NewSetupManager(logger logr.Logger, cfg ConfigReader, client client.WithWatch) *SetupManager {
 	setup := &SetupManager{
 		Cfg:        cfg,
 		client:     client,
@@ -47,13 +122,20 @@ func NewSetupManager(logger logr.Logger, cfg *viper.Viper, client client.WithWat
 }
 
 func (m *SetupManager) Start(ctx context.Context) error {
-	m.UpdateAnnotationsByRule()
-	m.logger.Info("setup manager sync config done")
-	m.Cfg.WatchConfig()
-	m.Cfg.OnConfigChange(func(e fsnotify.Event) {
+	if m.Cfg.InjectionAllowed() {
 		m.UpdateAnnotationsByRule()
 		m.logger.Info("setup manager sync config done")
-	})
+	} else {
+		m.logger.Info("namespace injection is paused while waiting for daemon-go config")
+	}
+	if store, ok := m.Cfg.(*ConfigStore); ok {
+		store.WatchLocalConfig(func(e fsnotify.Event) {
+			if m.Cfg.InjectionAllowed() {
+				m.UpdateAnnotationsByRule()
+				m.logger.Info("setup manager sync config done")
+			}
+		})
+	}
 
 	go m.WatchNamespace(ctx)
 	return nil
@@ -127,6 +209,9 @@ func (m *SetupManager) watchAndPatch(ctx context.Context) error {
 }
 
 func (m *SetupManager) handleNamespaceCreation(ctx context.Context, ns *corev1.Namespace) error {
+	if !m.Cfg.InjectionAllowed() {
+		return nil
+	}
 	if ns.Name == "kube-system" || ns.Name == env.GetCurrentNamespace() {
 		return nil
 	}
@@ -173,6 +258,10 @@ func (m *SetupManager) handleNamespaceCreation(ctx context.Context, ns *corev1.N
 func (m *SetupManager) UpdateAnnotationsByRule() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !m.Cfg.InjectionAllowed() {
+		m.logger.Info("skip namespace injection sync because daemon-go config is unavailable")
+		return
+	}
 
 	m.instrumentAll = m.Cfg.GetBool("instrument-all-namespace")
 	m.forceInstrumentAll = m.Cfg.GetBool("force-instrument-all-namespace")
@@ -183,13 +272,13 @@ func (m *SetupManager) UpdateAnnotationsByRule() {
 	// 强制注入所有的NS和workload
 	if m.forceInstrumentAll {
 		// 对所有可访问的NS(跳过kube-system)添加注入标记
-		nsList, err := m.namespaces.InstrumentAll(m.logger, m.client)
+		nsList, err := m.namespaces.InstrumentAll(m.logger, m.client, m.Cfg)
 		if err != nil {
 			m.logger.Error(err, "instrument namespace failed")
 		}
 		// 同时向所有可访问的workload添加注入标记
 		for _, namespace := range nsList {
-			err = m.workloads.InstrumentAll(m.logger, m.client, namespace)
+			err = m.workloads.InstrumentAll(m.logger, m.client, namespace, m.Cfg)
 			if err != nil {
 				m.logger.Error(err, "instrument workload failed")
 			}

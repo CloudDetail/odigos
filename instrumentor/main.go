@@ -17,8 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
 	"os"
+	"path/filepath"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -76,6 +79,10 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var telemetryDisabled bool
+	var namespaceConfigFromDaemon bool
+	var daemonNamespaceConfigSocket string
+	var daemonNamespaceConfigRetryInterval time.Duration
+	var daemonNamespaceConfigRequestTimeout time.Duration
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -83,6 +90,10 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&telemetryDisabled, "telemetry-disabled", false, "Disable telemetry")
+	flag.BoolVar(&namespaceConfigFromDaemon, "namespace-config-from-daemon", false, "Use daemon-go as the namespace injection config source")
+	flag.StringVar(&daemonNamespaceConfigSocket, "daemon-namespace-config-socket", "/var/run/odigos-config/namespace-config.sock", "daemon-go namespace injection config Unix socket")
+	flag.DurationVar(&daemonNamespaceConfigRetryInterval, "daemon-namespace-config-retry-interval", 15*time.Second, "daemon-go namespace config retry interval")
+	flag.DurationVar(&daemonNamespaceConfigRequestTimeout, "daemon-namespace-config-request-timeout", 5*time.Second, "daemon-go namespace config request timeout")
 
 	opts := ctrlzap.Options{
 		Development: true,
@@ -118,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupMgr, err := createSetupManager()
+	setupMgr, err := createSetupManager(namespaceConfigFromDaemon)
 	if err == nil {
 		mgr.Add(setupMgr)
 	} else {
@@ -135,6 +146,30 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to create controller")
 		os.Exit(1)
+	}
+	if namespaceConfigFromDaemon {
+		if !filepath.IsAbs(daemonNamespaceConfigSocket) {
+			setupLog.Error(errors.New("socket path must be absolute"), "invalid daemon namespace config socket", "path", daemonNamespaceConfigSocket)
+			os.Exit(1)
+		}
+		if daemonNamespaceConfigRetryInterval <= 0 || daemonNamespaceConfigRequestTimeout <= 0 {
+			setupLog.Error(errors.New("retry interval and request timeout must be positive"), "invalid daemon namespace config timing")
+			os.Exit(1)
+		}
+		store := setupMgr.Cfg.(*setup.ConfigStore)
+		daemonConfigClient := setup.NewDaemonConfigClient(
+			daemonNamespaceConfigSocket,
+			daemonNamespaceConfigRetryInterval,
+			daemonNamespaceConfigRequestTimeout,
+			store,
+			setupLog,
+			setupMgr.UpdateAnnotationsByRule,
+		)
+		daemonConfigClient.SetInventorySource(setupMgr.WorkloadInventory)
+		if err := mgr.Add(daemonConfigClient); err != nil {
+			setupLog.Error(err, "unable to add daemon namespace config client")
+			os.Exit(1)
+		}
 	}
 
 	err = deleteinstrumentedapplication.SetupWithManager(mgr)
@@ -163,7 +198,7 @@ func main() {
 	}
 }
 
-func createSetupManager() (*setup.SetupManager, error) {
+func createSetupManager(namespaceConfigFromDaemon bool) (*setup.SetupManager, error) {
 	path, find := os.LookupEnv("INSTRUMENT_CONFIGS_PATH")
 	if !find {
 		path = "config/instrument-conf.yaml"
@@ -197,6 +232,7 @@ func createSetupManager() (*setup.SetupManager, error) {
 		return nil, err
 	}
 
-	smgr := setup.NewSetupManager(setupLog, setupCfg, client)
+	configStore := setup.NewConfigStore(setupCfg, namespaceConfigFromDaemon)
+	smgr := setup.NewSetupManager(setupLog, configStore, client)
 	return smgr, nil
 }

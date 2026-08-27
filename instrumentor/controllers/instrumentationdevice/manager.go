@@ -5,8 +5,8 @@ import (
 
 	odigosv1 "github.com/odigos-io/odigos/api/odigos/v1alpha1"
 	v1 "github.com/odigos-io/odigos/api/v1"
+	"github.com/odigos-io/odigos/instrumentor/setup"
 	k8sutils "github.com/odigos-io/odigos/k8sutils/pkg/client"
-	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -19,12 +19,16 @@ import (
 )
 
 type workloadNeedUpdateInstrument struct {
-	cfg *viper.Viper
+	cfg setup.ConfigReader
 	workloadEnvChangePredicate
 }
 
-func shouldInstrumentOnCreate(obj client.Object, cfg *viper.Viper) bool {
+func shouldInstrumentOnCreate(obj client.Object, cfg setup.ConfigReader) bool {
 	logger := ctrl.Log.WithName("instrumentationdevice-workload-filter")
+	if cfg != nil && !cfg.InjectionAllowed() {
+		logger.Info("workload create event ignored because namespace injection is paused", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		return false
+	}
 	if getInstrumentEnabledLabelFromObject(obj) {
 		logger.Info("workload create event accepted because instrumentation label is enabled", "namespace", obj.GetNamespace(), "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 		return true
@@ -52,6 +56,9 @@ func (w *workloadNeedUpdateInstrument) Create(e event.CreateEvent) bool {
 }
 
 func (w *workloadNeedUpdateInstrument) Update(e event.UpdateEvent) bool {
+	if w.cfg != nil && !w.cfg.InjectionAllowed() {
+		return false
+	}
 	enabledOld := getInstrumentEnabledLabelFromObject(e.ObjectOld)
 	enabledNew := getInstrumentEnabledLabelFromObject(e.ObjectNew)
 
@@ -143,7 +150,7 @@ func (w workloadEnvChangePredicate) Generic(e event.GenericEvent) bool {
 	return false
 }
 
-func SetupWithManager(mgr ctrl.Manager, cfg *viper.Viper) error {
+func SetupWithManager(mgr ctrl.Manager, cfg setup.ConfigReader) error {
 	// Create a new client with fallback to API server
 	// We are doing this because client-go cache is not supporting dynamic cache rules
 	// Sometimes we will need to get/list objects that are out of the cache (e.g. when namespace is labeled)

@@ -47,6 +47,29 @@ func TestPatchEnvVarsForContainerSyncsServiceNameFromManifestEnv(t *testing.T) {
 	assertEnvCount(t, container.Env, "SW_AGENT_NAME", 1)
 }
 
+func TestRemoteServiceNameMappingOverridesManifestValue(t *testing.T) {
+	envOverwrite.SetServiceNamePolicy(&envOverwrite.ServiceNamePolicy{Mappings: []envOverwrite.ServiceNameMapping{{
+		NamespacePattern: "^prod$", WorkloadPattern: "^checkout$", ServiceName: "orders-api",
+	}}})
+	t.Cleanup(func() { envOverwrite.SetServiceNamePolicy(nil) })
+	runtimeDetails := &odigosv1.InstrumentedApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "deployment-checkout", Namespace: "prod"},
+		Spec: odigosv1.InstrumentedApplicationSpec{RuntimeDetails: []odigosv1.RuntimeDetailsByContainer{{
+			ContainerName: "api", Language: common.JavascriptProgrammingLanguage,
+		}}},
+	}
+	container := &corev1.Container{Name: "api", Env: []corev1.EnvVar{{Name: "OTEL_SERVICE_NAME", Value: "manifest-name"}}}
+	targetObj := &appsv1.Deployment{}
+	manifestEnvOriginal, err := envoverwrite.NewOrigWorkloadEnvValues(targetObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := patchEnvVarsForContainer(logr.Discard(), runtimeDetails, container, targetObj, common.OtelSdkNativeCommunity, manifestEnvOriginal); err != nil {
+		t.Fatal(err)
+	}
+	assertEnvValue(t, container.Env, "OTEL_SERVICE_NAME", "orders-api")
+}
+
 func TestPatchEnvVarsForContainerReadsCustomServiceNameEnvName(t *testing.T) {
 	t.Setenv(envOverwrite.ServiceNameEnvNamesEnv, "DD_SERVICE")
 
